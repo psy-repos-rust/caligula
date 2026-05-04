@@ -13,6 +13,7 @@ use indicatif::ProgressStyle;
 use crate::compression::CompressionFormat;
 use crate::device::WriteTarget;
 use crate::herder_daemon::ipc::WriteVerifyEvent;
+use crate::orchestrator::BeginParams;
 use crate::ui::writer_tracking::WriterState;
 
 use self::ask_hash::ask_hash;
@@ -21,7 +22,6 @@ use self::ask_outfile::ask_outfile;
 use self::ask_outfile::confirm_write;
 
 use super::cli::BurnArgs;
-use super::start::BeginParams;
 use crate::herder_facade::HerdHandle;
 
 mod ask_hash;

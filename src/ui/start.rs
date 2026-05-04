@@ -1,15 +1,14 @@
-use std::{fmt::Display, fs::File, path::PathBuf, sync::Arc};
+use std::{fmt::Display, sync::Arc};
 
-use bytesize::ByteSize;
 use inquire::Confirm;
 use tracing::debug;
 
 use crate::{
-    compression::CompressionFormat,
-    device::{self, WriteTarget},
-    herder_daemon::ipc::{WriteVerifyAction, WriteVerifyError, WriteVerifyEvent},
-    herder_facade::{HerdHandle, HerderFacade, StartWriterError},
+    device,
+    herder_daemon::ipc::{WriteVerifyError, WriteVerifyEvent},
+    herder_facade::{HerdHandle, StartWriterError},
     logging::LogPaths,
+    orchestrator::{BeginParams, Orchestrator},
     ui::{
         cli::{Interactive, UseSudo},
         fancy_ui::FancyUI,
@@ -18,49 +17,14 @@ use crate::{
     },
 };
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct BeginParams {
-    pub input_file: PathBuf,
-    pub input_file_size: ByteSize,
-    pub compression: CompressionFormat,
-    pub target: WriteTarget,
-}
-
-impl BeginParams {
-    pub fn new(
-        input_file: PathBuf,
-        compression: CompressionFormat,
-        target: WriteTarget,
-    ) -> std::io::Result<Self> {
-        let input_file_size = ByteSize::b(File::open(&input_file)?.metadata()?.len());
-        Ok(Self {
-            input_file,
-            input_file_size,
-            compression,
-            target,
-        })
-    }
-
-    pub fn make_child_config(&self) -> WriteVerifyAction {
-        WriteVerifyAction {
-            dest: self.target.devnode.clone(),
-            src: self.input_file.clone(),
-            verify: true,
-            compression: self.compression,
-            target_type: self.target.target_type,
-            block_size: self.target.block_size.0.map(|s| s.as_u64()),
-        }
-    }
-}
-
 #[tracing::instrument(skip_all, fields(root, interactive))]
 pub async fn try_start_burn(
-    herder: &mut impl HerderFacade,
-    args: &WriteVerifyAction,
+    orc: &impl Orchestrator,
+    args: &BeginParams,
     root: UseSudo,
     interactive: bool,
-) -> anyhow::Result<HerdHandle<WriteVerifyEvent>> {
-    let err = match herder.start_herd(args.clone(), false).await {
+) -> Result<HerdHandle<WriteVerifyEvent>, StartWriterError<WriteVerifyEvent>> {
+    let err = match orc.start_write_verify(false, args.clone()).await {
         Ok(p) => {
             return Ok(p);
         }
@@ -74,20 +38,21 @@ pub async fn try_start_burn(
 
                 let response = Confirm::new(&format!(
                     "We don't have permissions on {}. Escalate using sudo?",
-                    args.dest.to_string_lossy()
+                    args.target.name
                 ))
                 .with_default(true)
                 .with_help_message(
                     "We will use the sudo command, which may prompt you for a password.",
                 )
-                .prompt()?;
+                .prompt()
+                .expect("prompting the user should not fail");
 
                 if response {
-                    return Ok(herder.start_herd(args.clone(), true).await?);
+                    return Ok(orc.start_write_verify(true, args.clone()).await?);
                 }
             }
             (UseSudo::Always, _) => {
-                return Ok(herder.start_herd(args.clone(), true).await?);
+                return Ok(orc.start_write_verify(true, args.clone()).await?);
             }
             _ => {}
         }

@@ -12,6 +12,7 @@ pub use self::utils::ByteSpeed;
 use crate::{
     herder_facade::make_herder_facade_impl,
     logging::LogPaths,
+    orchestrator::make_orchestrator_impl,
     tty::TermiosRestore,
     ui::{
         simple_ui::do_setup_wizard,
@@ -40,10 +41,11 @@ pub async fn main(
         return Ok(());
     };
 
-    let mut herder = make_herder_facade_impl(log_paths.main());
+    let herder = make_herder_facade_impl(log_paths.main());
+    let mut orc = make_orchestrator_impl(herder);
     let handle = try_start_burn(
-        &mut herder,
-        &begin_params.make_child_config(),
+        &mut orc,
+        &begin_params,
         args.root,
         args.interactive.is_interactive(),
     )

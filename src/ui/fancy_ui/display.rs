@@ -11,10 +11,8 @@ use ratatui::{
 use tokio::{select, time};
 
 use crate::{
-    herder_daemon::ipc::WriteVerifyEvent,
-    herder_facade::HerdHandle,
-    logging::LogPaths,
-    ui::{start::BeginParams, writer_tracking::WriterState},
+    herder_daemon::ipc::WriteVerifyEvent, herder_facade::HerdHandle, logging::LogPaths,
+    orchestrator::BeginParams, ui::writer_tracking::WriterState,
 };
 
 use super::{

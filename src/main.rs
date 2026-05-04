@@ -12,6 +12,7 @@ mod herder_facade;
 mod ipc_common;
 mod logging;
 mod native;
+mod orchestrator;
 mod tty;
 mod ui;
 mod util;
