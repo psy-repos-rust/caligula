@@ -2,7 +2,7 @@ mod write_verify;
 
 use std::sync::Arc;
 
-pub use self::write_verify::BeginParams;
+pub use self::write_verify::{BeginParams, WriterState};
 use crate::{
     herder_daemon::ipc::WriteVerifyEvent,
     herder_facade::{HerdHandle, HerderFacade, StartWriterError},

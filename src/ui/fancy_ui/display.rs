@@ -12,7 +12,7 @@ use tokio::{select, time};
 
 use crate::{
     herder_daemon::ipc::WriteVerifyEvent, herder_facade::HerdHandle, logging::LogPaths,
-    orchestrator::BeginParams, ui::writer_tracking::WriterState,
+    orchestrator::{BeginParams, WriterState}
 };
 
 use super::{

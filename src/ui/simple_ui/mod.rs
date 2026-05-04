@@ -14,7 +14,7 @@ use crate::compression::CompressionFormat;
 use crate::device::WriteTarget;
 use crate::herder_daemon::ipc::WriteVerifyEvent;
 use crate::orchestrator::BeginParams;
-use crate::ui::writer_tracking::WriterState;
+use crate::orchestrator::WriterState;
 
 use self::ask_hash::ask_hash;
 use self::ask_outfile::ask_compression;

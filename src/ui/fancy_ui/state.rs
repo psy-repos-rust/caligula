@@ -3,7 +3,10 @@ use std::time::Instant;
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use tracing::info;
 
-use crate::{herder_daemon::ipc::WriteVerifyEvent, orchestrator::BeginParams, ui::writer_tracking::WriterState};
+use crate::{
+    herder_daemon::ipc::WriteVerifyEvent,
+    orchestrator::{BeginParams, WriterState},
+};
 
 use super::widgets::{QuitModal, QuitModalResult, SpeedChartState};
 

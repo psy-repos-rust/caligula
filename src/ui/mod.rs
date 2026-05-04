@@ -3,7 +3,6 @@ mod fancy_ui;
 mod simple_ui;
 mod start;
 mod utils;
-mod writer_tracking;
 
 use std::{fs::File, path::Path, sync::Arc};
 
