@@ -10,11 +10,20 @@ use tracing_unwrap::ResultExt;
 use crate::{
     herder_api::{StartHerd, TopLevelHerdEvent, write_verify::WriteVerifyAction},
     ipc_common::{read_msg_async, write_msg},
+    runtime::ThreadSpawn as _,
 };
 
 mod writer_process;
 
-pub async fn main() {
+pub fn main() {
+    let runtime = crate::runtime::AsyncRuntime::start();
+    runtime
+        .spawn(|| async_main())
+        .blocking_recv()
+        .expect("Daemon failed!");
+}
+
+async fn async_main() {
     loop {
         let msg = match read_msg_async::<StartHerd<WriteVerifyAction>>(tokio::io::stdin()).await {
             Ok(d) => d,

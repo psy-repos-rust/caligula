@@ -13,6 +13,7 @@ mod ipc_common;
 mod logging;
 mod native;
 mod orchestrator;
+mod runtime;
 mod tty;
 mod ui;
 mod util;
@@ -43,8 +44,7 @@ pub struct HerderDaemonArgs {
     log_file: String,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let args: Args = match std::env::var("_CALIGULA_CONFIGURE_CLAP_FOR_README") {
         Ok(var) if var == "1" => parse_args_for_readme_generation(),
         _ => Args::parse(),
@@ -57,14 +57,14 @@ async fn main() {
             logging::init_logging_parent(&log_paths);
 
             debug!("Starting primary process");
-            match ui::main(&state_dir, log_paths.into(), &burn_args).await {
+            match ui::main(&state_dir, log_paths.into(), burn_args) {
                 Ok(_) => (),
                 Err(e) => handle_toplevel_error(e),
             }
         }
         Command::HerderDaemon(args) => {
             logging::init_logging_child(args.log_file);
-            herder_daemon::main().await;
+            herder_daemon::main();
         }
     }
 }

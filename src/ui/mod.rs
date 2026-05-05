@@ -11,6 +11,7 @@ pub use self::utils::ByteSpeed;
 use crate::{
     logging::LogPaths,
     orchestrator::make_orchestrator_impl,
+    runtime::ThreadSpawn as _,
     tty::TermiosRestore,
     ui::{
         simple_ui::do_setup_wizard,
@@ -19,11 +20,7 @@ use crate::{
 };
 use tracing::{debug, info};
 
-pub async fn main(
-    _state_dir: &Path,
-    log_paths: Arc<LogPaths>,
-    args: &BurnArgs,
-) -> anyhow::Result<()> {
+pub fn main(_state_dir: &Path, log_paths: Arc<LogPaths>, args: BurnArgs) -> anyhow::Result<()> {
     let _termios_restore = match File::open("/dev/tty") {
         Ok(tty) => TermiosRestore::new(tty).ok(),
         Err(error) => {
@@ -39,15 +36,22 @@ pub async fn main(
         return Ok(());
     };
 
-    let mut orc = make_orchestrator_impl(log_paths.main());
-    let handle = try_start_burn(
-        &mut orc,
-        &begin_params,
-        args.root,
-        args.interactive.is_interactive(),
-    )
-    .await?;
-    begin_writing(args.interactive, begin_params, handle, log_paths).await?;
+    let runtime = crate::runtime::AsyncRuntime::start();
+    runtime
+        .spawn(move || async move {
+            let mut orc = make_orchestrator_impl(log_paths.main());
+            let handle = try_start_burn(
+                &mut orc,
+                &begin_params,
+                args.root,
+                args.interactive.is_interactive(),
+            )
+            .await?;
+            begin_writing(args.interactive, begin_params, handle, log_paths).await?;
+            anyhow::Ok(())
+        })
+        .blocking_recv()
+        .expect("future dropped")?;
 
     debug!("Done!");
     Ok(())
