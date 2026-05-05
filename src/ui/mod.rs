@@ -10,7 +10,7 @@ pub use self::utils::ByteSpeed;
 use crate::{
     logging::LogPaths,
     orchestrator::{WriteVerifyParams, WriteVerifyStarted, make_orchestrator_impl},
-    runtime::RemoteSpawn as _,
+    runtime::RemoteSpawn,
     tty::TermiosRestore,
     ui::{cli::Interactive, simple_ui::do_setup_wizard, utils::TUICapture},
 };
@@ -44,49 +44,46 @@ pub fn main(_state_dir: &Path, log_paths: Arc<LogPaths>, args: BurnArgs) -> anyh
         args.interactive.is_interactive(),
     )?;
 
-    runtime
-        .spawn(move || async move {
-            begin_writing(args.interactive, begin_params, handle, log_paths).await?;
-            anyhow::Ok(())
-        })
-        .blocking_recv()
-        .expect("future dropped")?;
+    begin_writing(runtime, args.interactive, begin_params, handle, log_paths)?;
 
     debug!("Done!");
     Ok(())
 }
 
-pub async fn begin_writing(
+pub fn begin_writing(
+    runtime: impl RemoteSpawn,
     interactive: Interactive,
     params: WriteVerifyParams,
     started: WriteVerifyStarted,
     log_paths: Arc<LogPaths>,
 ) -> anyhow::Result<()> {
-    debug!("Opening TUI");
-
     if interactive.is_interactive() {
-        debug!("Using fancy interactive TUI");
-        let mut tui = TUICapture::new()?;
-        let terminal = tui.terminal();
-
-        // create app and run it
-        fancy_ui::run(fancy_ui::Params {
-            terminal,
-            begin: &params,
-            child_state: started.state,
-            terminal_events: crossterm::event::EventStream::new(),
-            log_paths: &log_paths,
-        })
-        .await?;
-        debug!("Closing TUI");
+        runtime
+            .spawn(move || async move {
+                let mut tui = TUICapture::new()?;
+                let terminal = tui.terminal();
+                // create app and run it
+                fancy_ui::run(fancy_ui::Params {
+                    terminal,
+                    begin: &params,
+                    child_state: started.state,
+                    terminal_events: crossterm::event::EventStream::new(),
+                    log_paths: &log_paths,
+                })
+                .await
+            })
+            .blocking_recv()
+            .expect("runtime failed")
     } else {
-        debug!("Using simple TUI");
-        simple_ui::run(simple_ui::Params {
-            initial_info: &started.start,
-            child_state: started.state,
-        })
-        .await?;
+        runtime
+            .spawn(move || async move {
+                simple_ui::run(simple_ui::Params {
+                    initial_info: &started.start,
+                    child_state: started.state,
+                })
+                .await
+            })
+            .blocking_recv()
+            .expect("runtime failed")
     }
-
-    Ok(())
 }
