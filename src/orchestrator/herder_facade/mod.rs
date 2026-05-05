@@ -1,4 +1,7 @@
-// TODO: delete this thing
+//! WARNING: HERE THERE BE DRAGONS
+//!
+//! The good parts of this submodule will get assimilated into orchestrator once I get back to working
+//! on the stdiomux branch. Don't rely on this module whatsoever! Orchestrator is mildly stable though.
 
 mod client;
 mod facade;
@@ -21,6 +24,8 @@ pub trait HerderFacade {
         action: A,
         escalated: bool,
     ) -> Result<HerdHandle<A::Event>, StartWriterError<A::Event>>;
+
+    async fn ensure_escalated_daemon(&mut self) -> Result<(), DaemonError>;
 }
 
 /// A wrapper around the events and information associated with a single herd

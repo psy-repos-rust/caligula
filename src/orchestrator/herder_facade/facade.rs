@@ -123,6 +123,10 @@ where
             initial_info,
         })
     }
+
+    async fn ensure_escalated_daemon(&mut self) -> Result<(), DaemonError> {
+        self.escalated_daemon.ensure_escalated_daemon().await
+    }
 }
 
 #[derive(Debug)]

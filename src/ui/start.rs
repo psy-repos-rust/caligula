@@ -16,12 +16,12 @@ use crate::{
 
 #[tracing::instrument(skip_all, fields(root, interactive))]
 pub async fn try_start_burn(
-    orc: &impl Orchestrator,
+    orc: &mut impl Orchestrator,
     args: &WriteVerifyParams,
     root: UseSudo,
     interactive: bool,
 ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
-    let err = match orc.start_write_verify(false, args.clone()).await {
+    let err = match orc.start_write_verify(args.clone()).await {
         Ok(p) => {
             return Ok(p);
         }
@@ -45,11 +45,13 @@ pub async fn try_start_burn(
                 .expect("prompting the user should not fail");
 
                 if response {
-                    return Ok(orc.start_write_verify(true, args.clone()).await?);
+                    orc.escalate(None).await?;
+                    return Ok(orc.start_write_verify(args.clone()).await?);
                 }
             }
             (UseSudo::Always, _) => {
-                return Ok(orc.start_write_verify(true, args.clone()).await?);
+                orc.escalate(None).await?;
+                return Ok(orc.start_write_verify(args.clone()).await?);
             }
             _ => {}
         }
