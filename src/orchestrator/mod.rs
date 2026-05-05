@@ -5,9 +5,9 @@ use crate::{
     herder_api::write_verify::*,
     herder_facade::{HerderFacade, StartWriterError},
 };
-use futures::StreamExt;
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 
+mod real;
 pub mod watch;
 pub use self::write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterState};
 
@@ -29,62 +29,18 @@ pub trait Orchestrator {
     /// Start a write + verify workflow.
     ///
     /// Returns when we get an initial success message from the task group, or there was a failure.
-    fn start_write_verify(
+    async fn start_write_verify(
         &self,
         escalate: bool,
         begin_params: WriteVerifyParams,
-    ) -> impl Future<Output = Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>>>;
-}
-
-/// Actual orchestrator implementation used by Caligula.
-struct OrchestratorImpl<H> {
-    h: Arc<tokio::sync::Mutex<H>>,
-}
-
-impl<H: HerderFacade> Orchestrator for OrchestratorImpl<H> {
-    fn start_write_verify(
-        &self,
-        escalate: bool,
-        params: WriteVerifyParams,
-    ) -> impl Future<Output = Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>>> {
-        async move {
-            // request the herder to start the action
-            let mut lock = self.h.lock().await;
-            let handle = lock
-                .start_herd(params.make_child_config(), escalate)
-                .await?;
-            drop(lock);
-
-            // create state reduction task
-            let (tx_state, rx_state) = tokio::sync::watch::channel(WriterState::initial(
-                Instant::now(),
-                !params.compression.is_identity(),
-                handle.initial_info.input_file_bytes,
-            ));
-            let mut events = handle.events;
-            let _jh = tokio::spawn(async move {
-                while !tx_state.borrow().is_finished() && !tx_state.is_closed() {
-                    let event = events.next().await;
-                    tx_state.send_modify(move |state| {
-                        *state = std::mem::take(state).on_status(Instant::now(), event);
-                    });
-                }
-            });
-            let state = self::watch::Watch { rx: rx_state };
-
-            Ok(WriteVerifyStarted {
-                start: handle.initial_info,
-                state,
-            })
-        }
-    }
+    ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>>;
 }
 
 /// Make the actual prod-used orchestrator implementation.
 pub fn make_orchestrator_impl(
     h: impl HerderFacade + Send + Sync + 'static,
 ) -> impl Orchestrator + Send + Sync + 'static {
-    OrchestratorImpl {
+    self::real::OrchestratorImpl {
         h: Arc::new(tokio::sync::Mutex::new(h)),
     }
 }
