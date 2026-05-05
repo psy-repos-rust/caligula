@@ -6,7 +6,7 @@ use tracing::debug;
 use crate::{
     compression::{AVAILABLE_FORMATS, CompressionArg, CompressionFormat},
     device::{self, Removable, WriteTarget, enumerate_devices},
-    orchestrator::BeginParams,
+    orchestrator::WriteVerifyParams,
     ui::cli::BurnArgs,
 };
 
@@ -78,7 +78,10 @@ pub fn ask_outfile(args: &BurnArgs) -> anyhow::Result<WriteTarget> {
 }
 
 #[tracing::instrument(skip_all)]
-pub fn confirm_write(args: &BurnArgs, begin_params: &BeginParams) -> Result<bool, InquireError> {
+pub fn confirm_write(
+    args: &BurnArgs,
+    begin_params: &WriteVerifyParams,
+) -> Result<bool, InquireError> {
     if args.force {
         debug!("Skipping confirm because of --force");
         Ok(true)

@@ -1,16 +1,14 @@
-use std::{fmt::Display, sync::Arc, time::Instant};
+use std::{fmt::Display, sync::Arc};
 
-use futures::StreamExt;
 use inquire::Confirm;
-use tokio::sync::watch;
 use tracing::debug;
 
 use crate::{
     device,
     herder_daemon::ipc::{WriteVerifyError, WriteVerifyEvent},
-    herder_facade::{HerdHandle, StartWriterError},
+    herder_facade::StartWriterError,
     logging::LogPaths,
-    orchestrator::{BeginParams, Orchestrator, WriterState},
+    orchestrator::{Orchestrator, WriteVerifyParams, WriteVerifyStarted},
     ui::{
         cli::{Interactive, UseSudo},
         utils::TUICapture,
@@ -20,10 +18,10 @@ use crate::{
 #[tracing::instrument(skip_all, fields(root, interactive))]
 pub async fn try_start_burn(
     orc: &impl Orchestrator,
-    args: &BeginParams,
+    args: &WriteVerifyParams,
     root: UseSudo,
     interactive: bool,
-) -> Result<HerdHandle<WriteVerifyEvent>, StartWriterError<WriteVerifyEvent>> {
+) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
     let err = match orc.start_write_verify(false, args.clone()).await {
         Ok(p) => {
             return Ok(p);
@@ -63,26 +61,11 @@ pub async fn try_start_burn(
 
 pub async fn begin_writing(
     interactive: Interactive,
-    params: BeginParams,
-    handle: HerdHandle<WriteVerifyEvent>,
+    params: WriteVerifyParams,
+    started: WriteVerifyStarted,
     log_paths: Arc<LogPaths>,
 ) -> anyhow::Result<()> {
     debug!("Opening TUI");
-
-    let (tx_child_state, child_state) = watch::channel(WriterState::initial(
-        Instant::now(),
-        !params.compression.is_identity(),
-        handle.initial_info.input_file_bytes,
-    ));
-    let mut events = handle.events;
-    let _jh = tokio::spawn(async move {
-        while !tx_child_state.borrow().is_finished() {
-            let event = events.next().await;
-            tx_child_state.send_modify(move |state| {
-                *state = std::mem::take(state).on_status(Instant::now(), event);
-            });
-        }
-    });
 
     if interactive.is_interactive() {
         debug!("Using fancy interactive TUI");
@@ -93,7 +76,7 @@ pub async fn begin_writing(
         super::fancy_ui::run(super::fancy_ui::Params {
             terminal,
             begin: &params,
-            child_state,
+            child_state: started.state,
             terminal_events: crossterm::event::EventStream::new(),
             log_paths: &log_paths,
         })
@@ -102,8 +85,8 @@ pub async fn begin_writing(
     } else {
         debug!("Using simple TUI");
         super::simple_ui::run(super::simple_ui::Params {
-            initial_info: &handle.initial_info,
-            child_state,
+            initial_info: &started.start,
+            child_state: started.state,
         })
         .await?;
     }
@@ -111,7 +94,7 @@ pub async fn begin_writing(
     Ok(())
 }
 
-impl Display for BeginParams {
+impl Display for WriteVerifyParams {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "Input: {}", self.input_file.to_string_lossy())?;
         if self.compression.is_identity() {

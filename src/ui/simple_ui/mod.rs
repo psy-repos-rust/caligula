@@ -8,12 +8,10 @@ use std::time::Duration;
 
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
-use tokio::sync::watch;
 
 use crate::device::WriteTarget;
 use crate::herder_daemon::ipc::WriteVerifyStart;
-use crate::orchestrator::BeginParams;
-use crate::orchestrator::WriterState;
+use crate::orchestrator::{WriteVerifyParams, WriterState, watch::Watch};
 
 use self::ask_hash::ask_hash;
 use self::ask_outfile::ask_compression;
@@ -30,14 +28,14 @@ const REFRESH_PERIOD: Duration = Duration::from_millis(250);
 
 /// Returns the [BeginParams] if the user confirms, and None if the user doesn't.
 #[tracing::instrument(skip_all)]
-pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<BeginParams>, anyhow::Error> {
+pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<WriteVerifyParams>, anyhow::Error> {
     let compression = ask_compression(args)?;
     let _hash_info = ask_hash(args, compression)?;
     let target = match &args.out {
         Some(f) => WriteTarget::try_from(f.as_ref())?,
         None => ask_outfile(args)?,
     };
-    let begin_params = BeginParams::new(args.image.clone(), compression, target)?;
+    let begin_params = WriteVerifyParams::new(args.image.clone(), compression, target)?;
     if !confirm_write(args, &begin_params)? {
         eprintln!("Aborting.");
         return Ok(None);
@@ -47,7 +45,7 @@ pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<BeginParams>, anyhow::E
 
 pub struct Params<'a> {
     pub initial_info: &'a WriteVerifyStart,
-    pub child_state: watch::Receiver<WriterState>,
+    pub child_state: Watch<WriterState>,
 }
 
 /// Run the simple TUI.

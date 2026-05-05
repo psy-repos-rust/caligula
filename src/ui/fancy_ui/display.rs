@@ -7,9 +7,11 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
-use tokio::sync::watch;
 
-use crate::{logging::LogPaths, orchestrator::WriterState};
+use crate::{
+    logging::LogPaths,
+    orchestrator::{WriterState, watch::Watch},
+};
 
 use super::{
     state::{Quit, State, UIEvent},
@@ -23,7 +25,7 @@ where
 {
     pub terminal: &'a mut Terminal<B>,
     pub events: S,
-    pub child_state: watch::Receiver<WriterState>,
+    pub child_state: Watch<WriterState>,
     pub state: State,
     pub log_paths: &'a LogPaths,
 }

@@ -1,23 +1,32 @@
+use super::watch::Watch;
 use crate::{
     byteseries::{ByteSeries, EstimatedTime},
     compression::CompressionFormat,
     device::WriteTarget,
-    herder_daemon::ipc::{WriteVerifyAction, WriteVerifyError, WriteVerifyEvent},
+    herder_daemon::ipc::{WriteVerifyAction, WriteVerifyError, WriteVerifyEvent, WriteVerifyStart},
 };
 use bytesize::ByteSize;
 use std::time::Instant;
 use std::{fs::File, path::PathBuf};
 use tracing::{info, trace};
 
+/// Params for starting a write + verify workflow.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct BeginParams {
+pub struct WriteVerifyParams {
     pub input_file: PathBuf,
     pub input_file_size: ByteSize,
     pub compression: CompressionFormat,
     pub target: WriteTarget,
 }
 
-impl BeginParams {
+/// Result of starting a write + verify workflow.
+#[derive(Debug, Clone)]
+pub struct WriteVerifyStarted {
+    pub start: WriteVerifyStart,
+    pub state: Watch<WriterState>,
+}
+
+impl WriteVerifyParams {
     pub fn new(
         input_file: PathBuf,
         compression: CompressionFormat,

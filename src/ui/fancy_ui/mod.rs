@@ -1,11 +1,10 @@
 use futures::{Stream, StreamExt as _, stream};
 use ratatui::{Terminal, prelude::Backend};
-use tokio::sync::watch;
 
 use self::state::UIEvent;
 use crate::{
     logging::LogPaths,
-    orchestrator::{BeginParams, WriterState},
+    orchestrator::{WriteVerifyParams, WriterState, watch::Watch},
     ui::fancy_ui::{display::FancyUI, state::State},
 };
 use std::time::Duration;
@@ -23,8 +22,8 @@ where
     T: Stream<Item = std::io::Result<crossterm::event::Event>> + 'a,
 {
     pub terminal: &'a mut Terminal<B>,
-    pub begin: &'a BeginParams,
-    pub child_state: watch::Receiver<WriterState>,
+    pub begin: &'a WriteVerifyParams,
+    pub child_state: Watch<WriterState>,
     pub terminal_events: T,
     pub log_paths: &'a LogPaths,
 }
@@ -42,10 +41,11 @@ where
             .map(|e: std::io::Result<crossterm::event::Event>| {
                 UIEvent::RecvTermEvent(e.map_err(|e| (e.to_string(), e.kind())))
             });
-    let timeout_events = stream::unfold(tokio::time::interval(REFRESH_PERIOD), |mut i| async move {
-        i.tick().await;
-        Some((UIEvent::SleepTimeout, i))
-    });
+    let timeout_events =
+        stream::unfold(tokio::time::interval(REFRESH_PERIOD), |mut i| async move {
+            i.tick().await;
+            Some((UIEvent::SleepTimeout, i))
+        });
     let events = Box::pin(stream::select(terminal_events, timeout_events));
 
     let ui = FancyUI {

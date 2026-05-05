@@ -1,7 +1,7 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use tracing::info;
 
-use crate::orchestrator::{BeginParams, WriterState};
+use crate::orchestrator::{WriteVerifyParams, WriterState};
 
 use super::widgets::{QuitModal, QuitModalResult, SpeedChartState};
 
@@ -20,7 +20,7 @@ pub struct State {
 }
 
 impl State {
-    pub fn initial(params: &BeginParams) -> Self {
+    pub fn initial(params: &WriteVerifyParams) -> Self {
         State {
             input_filename: params.input_file.to_string_lossy().to_string(),
             target_filename: params.target.devnode.to_string_lossy().to_string(),
