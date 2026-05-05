@@ -9,7 +9,6 @@ use std::{fs::File, path::Path, sync::Arc};
 pub use self::cli::BurnArgs;
 pub use self::utils::ByteSpeed;
 use crate::{
-    herder_facade::make_herder_facade_impl,
     logging::LogPaths,
     orchestrator::make_orchestrator_impl,
     tty::TermiosRestore,
@@ -40,8 +39,7 @@ pub async fn main(
         return Ok(());
     };
 
-    let herder = make_herder_facade_impl(log_paths.main());
-    let mut orc = make_orchestrator_impl(herder);
+    let mut orc = make_orchestrator_impl(log_paths.main());
     let handle = try_start_burn(
         &mut orc,
         &begin_params,

@@ -6,9 +6,8 @@ use tracing::debug;
 use crate::{
     device,
     herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent},
-    herder_facade::StartWriterError,
     logging::LogPaths,
-    orchestrator::{Orchestrator, WriteVerifyParams, WriteVerifyStarted},
+    orchestrator::{Orchestrator, StartWriterError, WriteVerifyParams, WriteVerifyStarted},
     ui::{
         cli::{Interactive, UseSudo},
         utils::TUICapture,

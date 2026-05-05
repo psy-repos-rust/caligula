@@ -1,15 +1,16 @@
 //! Exposes the [`Orchestrator`], which is a facade that orchestrates all "high-level" work
 //! and tracks the state of worker tasks.
 
-use crate::{
-    herder_api::write_verify::*,
-    herder_facade::{HerderFacade, StartWriterError},
-};
+use crate::herder_api::write_verify::*;
 use std::sync::Arc;
 
+mod herder_facade;
 mod real;
 pub mod watch;
-pub use self::write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterState};
+pub use self::{
+    herder_facade::StartWriterError,
+    write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterState},
+};
 
 mod write_verify;
 
@@ -37,10 +38,10 @@ pub trait Orchestrator {
 }
 
 /// Make the actual prod-used orchestrator implementation.
-pub fn make_orchestrator_impl(
-    h: impl HerderFacade + Send + Sync + 'static,
-) -> impl Orchestrator + Send + Sync + 'static {
+pub fn make_orchestrator_impl(log_path: &str) -> impl Orchestrator + Send + Sync + 'static {
     self::real::OrchestratorImpl {
-        h: Arc::new(tokio::sync::Mutex::new(h)),
+        h: Arc::new(tokio::sync::Mutex::new(
+            herder_facade::make_herder_facade_impl(log_path),
+        )),
     }
 }

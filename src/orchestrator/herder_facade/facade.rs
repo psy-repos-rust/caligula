@@ -1,9 +1,9 @@
+use super::DaemonError;
 use super::client::LazyHerderClient;
+use super::client::{HerderClient, HerderClientFactory, RawHerderClient};
 use super::{HerdHandle, HerderFacade, StartWriterError};
 use crate::escalation::run_escalate;
 use crate::herder_api::{HerdAction, HerdEvent, TopLevelHerdEvent};
-use crate::herder_facade::DaemonError;
-use crate::herder_facade::client::{HerderClient, HerderClientFactory, RawHerderClient};
 use crate::ipc_common::read_msg_async;
 use futures::StreamExt;
 use std::collections::HashMap;

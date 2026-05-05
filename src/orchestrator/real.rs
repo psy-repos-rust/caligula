@@ -2,9 +2,9 @@ use std::{sync::Arc, time::Instant};
 
 use futures::StreamExt;
 
+use super::herder_facade::{HerderFacade, StartWriterError};
 use crate::{
     herder_api::write_verify::WriteVerifyEvent,
-    herder_facade::{HerderFacade, StartWriterError},
     orchestrator::{Orchestrator, WriteVerifyParams, WriteVerifyStarted, WriterState},
 };
 

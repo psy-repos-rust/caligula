@@ -1,4 +1,4 @@
-//! Utilities for spawning and interacting with herder daemons.
+// TODO: delete this thing
 
 mod client;
 mod facade;
