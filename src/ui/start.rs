@@ -68,32 +68,32 @@ pub async fn begin_writing(
     log_paths: Arc<LogPaths>,
 ) -> anyhow::Result<()> {
     debug!("Opening TUI");
+
+    let (tx_child_state, child_state) = watch::channel(WriterState::initial(
+        Instant::now(),
+        !params.compression.is_identity(),
+        handle.initial_info.input_file_bytes,
+    ));
+    let mut events = handle.events;
+    let _jh = tokio::spawn(async move {
+        while !tx_child_state.borrow().is_finished() {
+            let event = events.next().await;
+            tx_child_state.send_modify(move |state| {
+                *state = std::mem::take(state).on_status(Instant::now(), event);
+            });
+        }
+    });
+
     if interactive.is_interactive() {
         debug!("Using fancy interactive TUI");
         let mut tui = TUICapture::new()?;
         let terminal = tui.terminal();
 
-        let (tx, rx) = watch::channel(WriterState::initial(
-            Instant::now(),
-            !params.compression.is_identity(),
-            handle.initial_info.input_file_bytes,
-        ));
-
-        let mut events = handle.events;
-        let _jh = tokio::spawn(async move {
-            while !tx.borrow().is_finished() {
-                let event = events.next().await;
-                tx.send_modify(move |state| {
-                    *state = std::mem::take(state).on_status(Instant::now(), event);
-                });
-            }
-        });
-
         // create app and run it
         super::fancy_ui::run(super::fancy_ui::Params {
             terminal,
             begin: &params,
-            child_state: rx,
+            child_state,
             terminal_events: crossterm::event::EventStream::new(),
             log_paths: &log_paths,
         })
@@ -102,9 +102,8 @@ pub async fn begin_writing(
     } else {
         debug!("Using simple TUI");
         super::simple_ui::run(super::simple_ui::Params {
-            begin: &params,
             initial_info: &handle.initial_info,
-            events: handle.events,
+            child_state,
         })
         .await?;
     }

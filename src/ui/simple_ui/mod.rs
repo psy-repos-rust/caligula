@@ -4,15 +4,13 @@
 //! As pretty as ratatui looks, sometimes you can't use a full-featured terminal.
 //! This is what this module is for.
 
-use std::time::Instant;
+use std::time::Duration;
 
-use futures::Stream;
-use futures::StreamExt;
 use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
+use tokio::sync::watch;
 
 use crate::device::WriteTarget;
-use crate::herder_daemon::ipc::WriteVerifyEvent;
 use crate::herder_daemon::ipc::WriteVerifyStart;
 use crate::orchestrator::BeginParams;
 use crate::orchestrator::WriterState;
@@ -26,6 +24,9 @@ use super::cli::BurnArgs;
 
 mod ask_hash;
 mod ask_outfile;
+
+/// How often we refresh the display
+const REFRESH_PERIOD: Duration = Duration::from_millis(250);
 
 /// Returns the [BeginParams] if the user confirms, and None if the user doesn't.
 #[tracing::instrument(skip_all)]
@@ -44,21 +45,14 @@ pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<BeginParams>, anyhow::E
     Ok(Some(begin_params))
 }
 
-pub struct Params<'a, S>
-where
-    S: Stream<Item = WriteVerifyEvent> + Unpin + 'a,
-{
-    pub begin: &'a BeginParams,
+pub struct Params<'a> {
     pub initial_info: &'a WriteVerifyStart,
-    pub events: S,
+    pub child_state: watch::Receiver<WriterState>,
 }
 
 /// Run the simple TUI.
 #[tracing::instrument(skip_all)]
-pub async fn run<'a, S>(params: Params<'a, S>) -> anyhow::Result<()>
-where
-    S: Stream<Item = WriteVerifyEvent> + Unpin + 'a,
-{
+pub async fn run<'a>(params: Params<'a>) -> anyhow::Result<()> {
     let input_file_bytes = params.initial_info.input_file_bytes;
     let write_progress = ProgressBar::new(100).with_message("Burning").with_style(
         ProgressStyle::with_template(
@@ -73,17 +67,12 @@ where
         .unwrap(),
     );
 
-    let mut child_state = WriterState::initial(
-        Instant::now(),
-        !params.begin.compression.is_identity(),
-        input_file_bytes,
-    );
-    let mut events = params.events;
-
+    let mut interval = tokio::time::interval(REFRESH_PERIOD);
     loop {
-        let x = events.next().await;
-        child_state = child_state.on_status(Instant::now(), x);
-        match &child_state {
+        interval.tick().await;
+
+        let child_state = params.child_state.borrow();
+        match &*child_state {
             WriterState::Writing(b) => {
                 write_progress.set_position((b.approximate_ratio() * 1000.0) as u64)
             }
