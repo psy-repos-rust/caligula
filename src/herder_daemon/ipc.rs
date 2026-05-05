@@ -2,7 +2,9 @@ use std::fmt::{Debug, Display};
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub use super::writer_process::ipc::{WriteVerifyAction, WriteVerifyError, WriteVerifyEvent};
+pub use super::writer_process::ipc::{
+    WriteVerifyAction, WriteVerifyError, WriteVerifyEvent, WriteVerifyStart,
+};
 
 /// Tell the herder to start a herd for performing an arbitrary action.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

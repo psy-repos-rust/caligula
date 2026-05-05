@@ -4,7 +4,10 @@ use inquire::{Confirm, InquireError, Select};
 use tracing::debug;
 
 use crate::{
-    compression::{AVAILABLE_FORMATS, CompressionArg, CompressionFormat}, device::{self, Removable, WriteTarget, enumerate_devices}, orchestrator::BeginParams, ui::cli::BurnArgs
+    compression::{AVAILABLE_FORMATS, CompressionArg, CompressionFormat},
+    device::{self, Removable, WriteTarget, enumerate_devices},
+    orchestrator::BeginParams,
+    ui::cli::BurnArgs,
 };
 
 #[tracing::instrument(skip_all)]

@@ -14,7 +14,7 @@ use super::widgets::{QuitModal, QuitModalResult, SpeedChartState};
 pub enum UIEvent {
     SleepTimeout,
     RecvChildStatus(Instant, Option<WriteVerifyEvent>),
-    RecvTermEvent(Event),
+    RecvTermEvent(Result<Event, (String, std::io::ErrorKind)>),
 }
 
 #[derive(Debug, Clone)]
@@ -50,14 +50,21 @@ impl State {
     }
 
     #[tracing::instrument(skip_all, level = "debug", fields(ev))]
-    fn on_term_event(self, ev: Event) -> anyhow::Result<Self> {
+    fn on_term_event(
+        self,
+        ev: Result<Event, (String, std::io::ErrorKind)>,
+    ) -> anyhow::Result<Self> {
         match ev {
-            Event::Key(KeyEvent {
+            Ok(Event::Key(KeyEvent {
                 kind: KeyEventKind::Press,
                 code,
                 modifiers,
                 ..
-            }) => self.handle_key_down((code, modifiers)),
+            })) => self.handle_key_down((code, modifiers)),
+            Err((msg, kind)) => {
+                tracing::error!("Error getting term event ({kind}): {msg}");
+                Err(Quit)?
+            }
             _ => Ok(self),
         }
     }
