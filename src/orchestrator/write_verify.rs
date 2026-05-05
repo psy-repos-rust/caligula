@@ -2,8 +2,7 @@ use crate::{
     byteseries::{ByteSeries, EstimatedTime},
     compression::CompressionFormat,
     device::WriteTarget,
-    herder_daemon::ipc::WriteVerifyAction,
-    herder_daemon::ipc::{WriteVerifyError, WriteVerifyEvent},
+    herder_daemon::ipc::{WriteVerifyAction, WriteVerifyError, WriteVerifyEvent},
 };
 use bytesize::ByteSize;
 use std::time::Instant;
@@ -163,6 +162,20 @@ impl WriterState {
 
     pub fn is_finished(&self) -> bool {
         matches!(self, WriterState::Finished { .. })
+    }
+}
+
+impl Default for WriterState {
+    /// Suitable value to put into the cell when [`std::mem::take()`] is called.
+    fn default() -> Self {
+        let now = Instant::now();
+        Self::Finished {
+            finish_time: now,
+            error: Some(WriteVerifyError::Panicked),
+            write_hist: ByteSeries::new(now),
+            verify_hist: None,
+            total_write_bytes: 0,
+        }
     }
 }
 

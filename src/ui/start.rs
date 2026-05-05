@@ -1,6 +1,8 @@
-use std::{fmt::Display, sync::Arc};
+use std::{fmt::Display, sync::Arc, time::Instant};
 
+use futures::StreamExt;
 use inquire::Confirm;
+use tokio::sync::watch;
 use tracing::debug;
 
 use crate::{
@@ -8,7 +10,7 @@ use crate::{
     herder_daemon::ipc::{WriteVerifyError, WriteVerifyEvent},
     herder_facade::{HerdHandle, StartWriterError},
     logging::LogPaths,
-    orchestrator::{BeginParams, Orchestrator},
+    orchestrator::{BeginParams, Orchestrator, WriterState},
     ui::{
         cli::{Interactive, UseSudo},
         utils::TUICapture,
@@ -71,12 +73,27 @@ pub async fn begin_writing(
         let mut tui = TUICapture::new()?;
         let terminal = tui.terminal();
 
+        let (tx, rx) = watch::channel(WriterState::initial(
+            Instant::now(),
+            !params.compression.is_identity(),
+            handle.initial_info.input_file_bytes,
+        ));
+
+        let mut events = handle.events;
+        let _jh = tokio::spawn(async move {
+            while !tx.borrow().is_finished() {
+                let event = events.next().await;
+                tx.send_modify(move |state| {
+                    *state = std::mem::take(state).on_status(Instant::now(), event);
+                });
+            }
+        });
+
         // create app and run it
         super::fancy_ui::run(super::fancy_ui::Params {
             terminal,
             begin: &params,
-            initial_info: &handle.initial_info,
-            child_events: handle.events,
+            child_state: rx,
             terminal_events: crossterm::event::EventStream::new(),
             log_paths: &log_paths,
         })

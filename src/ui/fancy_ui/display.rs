@@ -7,6 +7,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
+use tokio::sync::watch;
 
 use crate::{logging::LogPaths, orchestrator::WriterState};
 
@@ -22,6 +23,7 @@ where
 {
     pub terminal: &'a mut Terminal<B>,
     pub events: S,
+    pub child_state: watch::Receiver<WriterState>,
     pub state: State,
     pub log_paths: &'a LogPaths,
 }
@@ -47,9 +49,10 @@ where
     #[tracing::instrument(skip_all, level = "trace")]
     async fn get_and_handle_events(mut self) -> anyhow::Result<Self> {
         while let Some(event) = self.events.next().await {
-            self.state = self.state.on_event(event)?;
+            let child = self.child_state.borrow();
+            self.state = self.state.on_event(&child, event)?;
 
-            draw(&mut self.state, self.terminal, &self.log_paths)?;
+            draw(&mut self.state, &child, self.terminal, &self.log_paths)?;
         }
         Ok(self)
     }
@@ -109,17 +112,18 @@ fn centered_rect(r: Rect, w: u16, h: u16) -> Rect {
 
 pub fn draw(
     state: &mut State,
+    child: &WriterState,
     terminal: &mut Terminal<impl ratatui::backend::Backend>,
     log_paths: &LogPaths,
 ) -> anyhow::Result<()> {
-    let progress_bar = WriterProgressBar::from_writer(&state.child);
+    let progress_bar = WriterProgressBar::from_writer(&child);
 
-    let final_time = match state.child {
-        WriterState::Finished { finish_time, .. } => finish_time,
+    let final_time = match child {
+        WriterState::Finished { finish_time, .. } => *finish_time,
         _ => Instant::now(),
     };
 
-    let error = match &state.child {
+    let error = match &child {
         WriterState::Finished { error, .. } => error.as_ref(),
         _ => None,
     };
@@ -127,11 +131,11 @@ pub fn draw(
     let info_table = WritingInfoTable {
         input_filename: &state.input_filename,
         target_filename: &state.target_filename,
-        state: &state.child,
+        state: &child,
     };
 
     let speed_chart = SpeedChart {
-        state: &state.child,
+        state: &child,
         final_time,
     };
 

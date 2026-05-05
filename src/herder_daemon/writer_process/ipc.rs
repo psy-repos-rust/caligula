@@ -74,6 +74,7 @@ pub enum WriteVerifyError {
     UnexpectedTermination,
     UnknownChildProcError(String),
     FailedToUnmount { message: String, exit_code: i32 },
+    Panicked,
 }
 
 impl From<std::io::Error> for WriteVerifyError {
@@ -104,6 +105,7 @@ impl Display for WriteVerifyError {
                 f,
                 "Failed to unmount disk (exit code {exit_code})\n{message}"
             ),
+            WriteVerifyError::Panicked => write!(f, "Orchestrator panicked!")
         }
     }
 }

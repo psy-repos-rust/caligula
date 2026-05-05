@@ -1,71 +1,58 @@
 use futures::{Stream, StreamExt as _, stream};
 use ratatui::{Terminal, prelude::Backend};
+use tokio::sync::watch;
 
 use self::state::UIEvent;
 use crate::{
-    herder_daemon::ipc::{WriteVerifyEvent, WriteVerifyStart},
     logging::LogPaths,
-    orchestrator::BeginParams,
+    orchestrator::{BeginParams, WriterState},
     ui::fancy_ui::{display::FancyUI, state::State},
 };
-use std::{time::Duration, time::Instant};
+use std::time::Duration;
 
 mod display;
 mod state;
 mod widgets;
 
-pub struct Params<'a, B, C, T>
+/// How often we refresh the display
+const REFRESH_PERIOD: Duration = Duration::from_millis(250);
+
+pub struct Params<'a, B, T>
 where
     B: Backend + 'a,
-    C: Stream<Item = WriteVerifyEvent> + 'a,
     T: Stream<Item = std::io::Result<crossterm::event::Event>> + 'a,
 {
     pub terminal: &'a mut Terminal<B>,
     pub begin: &'a BeginParams,
-    pub initial_info: &'a WriteVerifyStart,
-    pub child_events: C,
+    pub child_state: watch::Receiver<WriterState>,
     pub terminal_events: T,
     pub log_paths: &'a LogPaths,
 }
 
 /// Run the fancy TUI.
 #[tracing::instrument(skip_all)]
-pub async fn run<'a, B, C, T>(params: Params<'a, B, C, T>) -> anyhow::Result<()>
+pub async fn run<'a, B, T>(params: Params<'a, B, T>) -> anyhow::Result<()>
 where
     B: Backend,
-    C: Stream<Item = WriteVerifyEvent> + 'a,
     T: Stream<Item = std::io::Result<crossterm::event::Event>> + 'a,
 {
-    let child_events = params
-        .child_events
-        .map(|e: WriteVerifyEvent| UIEvent::RecvChildStatus(Instant::now(), Some(e)))
-        .chain(stream::once(async {
-            UIEvent::RecvChildStatus(Instant::now(), None)
-        }));
     let terminal_events =
         params
             .terminal_events
             .map(|e: std::io::Result<crossterm::event::Event>| {
                 UIEvent::RecvTermEvent(e.map_err(|e| (e.to_string(), e.kind())))
             });
-    let timeout_events = stream::unfold(
-        tokio::time::interval(Duration::from_millis(250)),
-        |mut i| async move {
-            i.tick().await;
-            Some((UIEvent::SleepTimeout, i))
-        },
-    );
-    let events = Box::pin(stream::select(
-        stream::select(child_events, terminal_events),
-        timeout_events,
-    ));
-
-    let input_file_bytes = params.initial_info.input_file_bytes;
+    let timeout_events = stream::unfold(tokio::time::interval(REFRESH_PERIOD), |mut i| async move {
+        i.tick().await;
+        Some((UIEvent::SleepTimeout, i))
+    });
+    let events = Box::pin(stream::select(terminal_events, timeout_events));
 
     let ui = FancyUI {
         terminal: params.terminal,
         events,
-        state: State::initial(Instant::now(), params.begin, input_file_bytes),
+        child_state: params.child_state,
+        state: State::initial(params.begin),
         log_paths: params.log_paths,
     };
 
