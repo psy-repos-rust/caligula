@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::time::Instant;
 
 use futures::{Stream, StreamExt};
 use ratatui::{
@@ -23,7 +23,7 @@ where
     pub terminal: &'a mut Terminal<B>,
     pub events: S,
     pub state: State,
-    pub log_paths: Arc<LogPaths>,
+    pub log_paths: &'a LogPaths,
 }
 
 impl<'a, B, S> FancyUI<'a, B, S>

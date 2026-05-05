@@ -8,13 +8,13 @@ use crate::{
     orchestrator::BeginParams,
     ui::fancy_ui::{display::FancyUI, state::State},
 };
-use std::{sync::Arc, time::Duration, time::Instant};
+use std::{time::Duration, time::Instant};
 
 mod display;
 mod state;
 mod widgets;
 
-pub struct FancyUiParams<'a, B, C, T>
+pub struct Params<'a, B, C, T>
 where
     B: Backend + 'a,
     C: Stream<Item = WriteVerifyEvent> + 'a,
@@ -22,15 +22,15 @@ where
 {
     pub terminal: &'a mut Terminal<B>,
     pub begin: &'a BeginParams,
-    pub initial_info: WriteVerifyStart,
+    pub initial_info: &'a WriteVerifyStart,
     pub child_events: C,
     pub terminal_events: T,
-    pub log_paths: Arc<LogPaths>,
+    pub log_paths: &'a LogPaths,
 }
 
 /// Run the fancy TUI.
 #[tracing::instrument(skip_all)]
-pub async fn run<'a, B, C, T>(params: FancyUiParams<'a, B, C, T>) -> anyhow::Result<()>
+pub async fn run<'a, B, C, T>(params: Params<'a, B, C, T>) -> anyhow::Result<()>
 where
     B: Backend,
     C: Stream<Item = WriteVerifyEvent> + 'a,

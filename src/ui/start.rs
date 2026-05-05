@@ -11,8 +11,6 @@ use crate::{
     orchestrator::{BeginParams, Orchestrator},
     ui::{
         cli::{Interactive, UseSudo},
-        fancy_ui::FancyUiParams,
-        simple_ui::run_simple_burning_ui,
         utils::TUICapture,
     },
 };
@@ -74,19 +72,24 @@ pub async fn begin_writing(
         let terminal = tui.terminal();
 
         // create app and run it
-        super::fancy_ui::run(FancyUiParams {
+        super::fancy_ui::run(super::fancy_ui::Params {
             terminal,
             begin: &params,
-            initial_info: handle.initial_info,
+            initial_info: &handle.initial_info,
             child_events: handle.events,
             terminal_events: crossterm::event::EventStream::new(),
-            log_paths,
+            log_paths: &log_paths,
         })
         .await?;
         debug!("Closing TUI");
     } else {
         debug!("Using simple TUI");
-        run_simple_burning_ui(handle, params.compression).await?;
+        super::simple_ui::run(super::simple_ui::Params {
+            begin: &params,
+            initial_info: &handle.initial_info,
+            events: handle.events,
+        })
+        .await?;
     }
 
     Ok(())
