@@ -11,7 +11,7 @@ pub use self::utils::ByteSpeed;
 use crate::{
     logging::LogPaths,
     orchestrator::make_orchestrator_impl,
-    runtime::ThreadSpawn as _,
+    runtime::RemoteSpawn as _,
     tty::TermiosRestore,
     ui::{
         simple_ui::do_setup_wizard,

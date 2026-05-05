@@ -10,7 +10,7 @@ use tracing_unwrap::ResultExt;
 use crate::{
     herder_api::{StartHerd, TopLevelHerdEvent, write_verify::WriteVerifyAction},
     ipc_common::{read_msg_async, write_msg},
-    runtime::ThreadSpawn as _,
+    runtime::RemoteSpawn as _,
 };
 
 mod writer_process;
