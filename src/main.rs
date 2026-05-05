@@ -52,7 +52,7 @@ async fn main() {
 
     match args.command {
         Command::Burn(burn_args) => {
-            let state_dir = util::ensure_state_dir().await.unwrap();
+            let state_dir = util::ensure_state_dir().unwrap();
             let log_paths = logging::LogPaths::init(&state_dir);
             logging::init_logging_parent(&log_paths);
 
