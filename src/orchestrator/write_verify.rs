@@ -3,7 +3,7 @@ use crate::{
     byteseries::{ByteSeries, EstimatedTime},
     compression::CompressionFormat,
     device::WriteTarget,
-    herder_daemon::ipc::{WriteVerifyAction, WriteVerifyError, WriteVerifyEvent, WriteVerifyStart},
+    herder_api::write_verify::*,
 };
 use bytesize::ByteSize;
 use std::time::Instant;
@@ -252,10 +252,7 @@ impl Writing {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use crate::{
-        byteseries::ByteSeries,
-        herder_daemon::ipc::{WriteVerifyError, WriteVerifyEvent},
-    };
+    use crate::{byteseries::ByteSeries, herder_api::write_verify::*};
 
     use super::WriterState;
 

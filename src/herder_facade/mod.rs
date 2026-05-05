@@ -5,7 +5,7 @@ mod facade;
 
 use futures::stream::BoxStream;
 
-use crate::herder_daemon::ipc::{HerdAction, HerdEvent, TopLevelHerdEvent};
+use crate::herder_api::{HerdAction, HerdEvent, TopLevelHerdEvent};
 
 pub use facade::make_herder_facade_impl;
 

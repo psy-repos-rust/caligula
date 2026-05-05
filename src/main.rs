@@ -7,6 +7,7 @@ mod device;
 mod escalation;
 mod hash;
 mod hashfile;
+mod herder_api;
 mod herder_daemon;
 mod herder_facade;
 mod ipc_common;

@@ -1,4 +1,4 @@
-use crate::herder_daemon::ipc::StartHerd;
+use crate::herder_api::StartHerd;
 use crate::herder_facade::DaemonError;
 use crate::ipc_common::write_msg_async;
 use serde::Serialize;

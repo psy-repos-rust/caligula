@@ -10,7 +10,7 @@ use indicatif::ProgressBar;
 use indicatif::ProgressStyle;
 
 use crate::device::WriteTarget;
-use crate::herder_daemon::ipc::WriteVerifyStart;
+use crate::herder_api::write_verify::WriteVerifyStart;
 use crate::orchestrator::{WriteVerifyParams, WriterState, watch::Watch};
 
 use self::ask_hash::ask_hash;

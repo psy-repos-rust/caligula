@@ -5,7 +5,7 @@ use tracing::debug;
 
 use crate::{
     device,
-    herder_daemon::ipc::{WriteVerifyError, WriteVerifyEvent},
+    herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent},
     herder_facade::StartWriterError,
     logging::LogPaths,
     orchestrator::{Orchestrator, WriteVerifyParams, WriteVerifyStarted},

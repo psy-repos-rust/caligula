@@ -2,7 +2,7 @@
 //! and tracks the state of worker tasks.
 
 use crate::{
-    herder_daemon::ipc::WriteVerifyEvent,
+    herder_api::write_verify::*,
     herder_facade::{HerderFacade, StartWriterError},
 };
 use futures::StreamExt;
