@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Instant};
+use std::time::Instant;
 
 use futures::StreamExt;
 
@@ -11,32 +11,40 @@ use crate::{
 
 /// Actual orchestrator implementation used by Caligula.
 pub struct OrchestratorImpl<H> {
+    inner: tokio::sync::Mutex<Inner<H>>,
+}
+
+struct Inner<H> {
     // TODO: get rid of the entire herder facade thing altogether. just assimilate the good parts
     // into orchestrator.
-    h: Arc<tokio::sync::Mutex<H>>,
+    h: H,
     escalation: Option<Option<EscalationMethod>>,
 }
 
 impl<H> OrchestratorImpl<H> {
     pub fn new(h: H) -> Self {
         Self {
-            h: Arc::new(tokio::sync::Mutex::new(h)),
-            escalation: None,
+            inner: Inner {
+                h,
+                escalation: None,
+            }
+            .into(),
         }
     }
 }
 
-impl<H: HerderFacade> Orchestrator for OrchestratorImpl<H> {
+impl<H: HerderFacade + Send + 'static> Orchestrator for OrchestratorImpl<H> {
     async fn start_write_verify(
         &self,
         params: WriteVerifyParams,
     ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
+        tracing::info!("Requesting herder to start");
+
         // request the herder to start the action
-        let mut lock = self.h.lock().await;
-        let handle = lock
-            .start_herd(params.make_child_config(), self.escalation.is_some())
-            .await?;
-        drop(lock);
+        let mut inner = self.inner.lock().await;
+        let esc = inner.escalation.is_some();
+        let handle = inner.h.start_herd(params.make_child_config(), esc).await?;
+        drop(inner);
 
         // create state reduction task
         let (tx_state, rx_state) = tokio::sync::watch::channel(WriterState::initial(
@@ -61,10 +69,10 @@ impl<H: HerderFacade> Orchestrator for OrchestratorImpl<H> {
         })
     }
 
-    async fn escalate(&mut self, method: Option<EscalationMethod>) -> Result<(), DaemonError> {
-        self.escalation = Some(method);
-        let mut lock = self.h.lock().await;
-        lock.ensure_escalated_daemon().await?;
+    async fn escalate(&self, method: Option<EscalationMethod>) -> Result<(), DaemonError> {
+        let mut inner = self.inner.lock().await;
+        inner.escalation = Some(method);
+        inner.h.ensure_escalated_daemon().await?;
         Ok(())
     }
 

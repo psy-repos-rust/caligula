@@ -6,7 +6,7 @@ use crate::{
     herder_api::write_verify::*,
 };
 use bytesize::ByteSize;
-use std::time::Instant;
+use std::{fmt::Display, time::Instant};
 use std::{fs::File, path::PathBuf};
 use tracing::{info, trace};
 
@@ -70,6 +70,32 @@ pub enum WriterState {
         verify_hist: Option<ByteSeries>,
         total_write_bytes: u64,
     },
+}
+
+impl Display for WriteVerifyParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Input: {}", self.input_file.to_string_lossy())?;
+        if self.compression.is_identity() {
+            writeln!(f, "  Size: {}", self.input_file_size)?;
+        } else {
+            writeln!(f, "  Size (compressed): {}", self.input_file_size)?;
+        }
+        writeln!(f, "  Compression: {}", self.compression)?;
+        writeln!(f)?;
+
+        writeln!(f, "Output: {}", self.target.name)?;
+        writeln!(f, "  Model: {}", self.target.model)?;
+        writeln!(f, "  Size: {}", self.target.size)?;
+        writeln!(f, "  Block size: {}", self.target.block_size)?;
+        writeln!(f, "  Type: {}", self.target.target_type)?;
+        writeln!(f, "  Path: {}", self.target.devnode.to_string_lossy())?;
+
+        if self.target.target_type == crate::device::Type::Disk {
+            writeln!(f, "  Removable: {}", self.target.removable)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl WriterState {

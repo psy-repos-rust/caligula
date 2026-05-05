@@ -1,11 +1,13 @@
 //! Exposes the [`Orchestrator`], which is a facade that orchestrates all "high-level" work
 //! and tracks the state of worker tasks.
 
+use std::sync::Arc;
+
 pub use self::{
     herder_facade::{DaemonError, StartWriterError},
     write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterState},
 };
-use crate::{escalation::EscalationMethod, herder_api::write_verify::*};
+use crate::{escalation::EscalationMethod, herder_api::write_verify::*, runtime::RemoteSpawn};
 
 mod herder_facade;
 mod real;
@@ -27,7 +29,7 @@ mod write_verify;
 ///
 /// The API for this can be considered "mostly" stable. I'll be changing out the error types, but
 /// in general, the overall shape of this API can be used for new UI developments.
-pub trait Orchestrator {
+pub trait Orchestrator: Sync + Send + 'static {
     /// Start a write + verify workflow.
     ///
     /// Returns when we get an initial success message from the task group, or there was a failure.
@@ -47,7 +49,7 @@ pub trait Orchestrator {
     ///
     /// If your requested method involves the terminal, you should switch back to the non-alternate
     /// screen before calling this.
-    async fn escalate(&mut self, method: Option<EscalationMethod>) -> Result<(), DaemonError>;
+    async fn escalate(&self, method: Option<EscalationMethod>) -> Result<(), DaemonError>;
 
     /// Returns whether or not we have a child process running as root.
     #[expect(dead_code)]
@@ -58,3 +60,39 @@ pub trait Orchestrator {
 pub fn make_orchestrator_impl(log_path: &str) -> impl Orchestrator + Send + Sync + 'static {
     self::real::OrchestratorImpl::new(herder_facade::make_herder_facade_impl(log_path))
 }
+
+pub trait OrchestratorExt: Orchestrator {
+    /// Like [`Orchestrator::start_write_verify()`], but it blocks your thread while waiting for it to start.
+    ///
+    /// THIS SHOULD ABSOLUTELY NOT UNDER ANY CIRCUMSTANCES be used in an async context! Just use the
+    /// non-blocking version of the trait! It's mostly only useful for the simple UI wizard, which
+    /// is inherently blocky.
+    fn start_write_verify_blocking(
+        self: Arc<Self>,
+        spawn: impl RemoteSpawn,
+        begin_params: WriteVerifyParams,
+    ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
+        spawn
+            .spawn(move || async move { self.start_write_verify(begin_params).await })
+            .blocking_recv()
+            .expect("remote task dropped!")
+    }
+
+    /// Like [`Orchestrator::escalate()`], but it blocks your thread while waiting for it to start.
+    ///
+    /// THIS SHOULD ABSOLUTELY NOT UNDER ANY CIRCUMSTANCES be used in an async context! Just use the
+    /// non-blocking version of the trait! It's mostly only useful for the simple UI wizard, which
+    /// is inherently blocky.
+    fn escalate_blocking(
+        self: Arc<Self>,
+        spawn: impl RemoteSpawn,
+        method: Option<EscalationMethod>,
+    ) -> Result<(), DaemonError> {
+        spawn
+            .spawn(move || async move { self.escalate(method).await })
+            .blocking_recv()
+            .expect("remote task dropped!")
+    }
+}
+
+impl<O: Orchestrator> OrchestratorExt for O {}

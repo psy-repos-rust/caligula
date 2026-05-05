@@ -1,7 +1,6 @@
 mod cli;
 mod fancy_ui;
 mod simple_ui;
-mod start;
 mod utils;
 
 use std::{fs::File, path::Path, sync::Arc};
@@ -10,17 +9,18 @@ pub use self::cli::BurnArgs;
 pub use self::utils::ByteSpeed;
 use crate::{
     logging::LogPaths,
-    orchestrator::make_orchestrator_impl,
+    orchestrator::{WriteVerifyParams, WriteVerifyStarted, make_orchestrator_impl},
     runtime::RemoteSpawn as _,
     tty::TermiosRestore,
-    ui::{
-        simple_ui::do_setup_wizard,
-        start::{begin_writing, try_start_burn},
-    },
+    ui::{cli::Interactive, simple_ui::do_setup_wizard, utils::TUICapture},
 };
 use tracing::{debug, info};
 
+/// Entrypoint for TUI-based UIs.
 pub fn main(_state_dir: &Path, log_paths: Arc<LogPaths>, args: BurnArgs) -> anyhow::Result<()> {
+    let runtime = crate::runtime::AsyncRuntime::start();
+    let orc = Arc::new(make_orchestrator_impl(log_paths.main()));
+
     let _termios_restore = match File::open("/dev/tty") {
         Ok(tty) => TermiosRestore::new(tty).ok(),
         Err(error) => {
@@ -36,17 +36,16 @@ pub fn main(_state_dir: &Path, log_paths: Arc<LogPaths>, args: BurnArgs) -> anyh
         return Ok(());
     };
 
-    let runtime = crate::runtime::AsyncRuntime::start();
+    let handle = simple_ui::try_start_write_or_escalate(
+        orc.clone(),
+        &runtime,
+        &begin_params,
+        args.root,
+        args.interactive.is_interactive(),
+    )?;
+
     runtime
         .spawn(move || async move {
-            let mut orc = make_orchestrator_impl(log_paths.main());
-            let handle = try_start_burn(
-                &mut orc,
-                &begin_params,
-                args.root,
-                args.interactive.is_interactive(),
-            )
-            .await?;
             begin_writing(args.interactive, begin_params, handle, log_paths).await?;
             anyhow::Ok(())
         })
@@ -54,5 +53,40 @@ pub fn main(_state_dir: &Path, log_paths: Arc<LogPaths>, args: BurnArgs) -> anyh
         .expect("future dropped")?;
 
     debug!("Done!");
+    Ok(())
+}
+
+pub async fn begin_writing(
+    interactive: Interactive,
+    params: WriteVerifyParams,
+    started: WriteVerifyStarted,
+    log_paths: Arc<LogPaths>,
+) -> anyhow::Result<()> {
+    debug!("Opening TUI");
+
+    if interactive.is_interactive() {
+        debug!("Using fancy interactive TUI");
+        let mut tui = TUICapture::new()?;
+        let terminal = tui.terminal();
+
+        // create app and run it
+        fancy_ui::run(fancy_ui::Params {
+            terminal,
+            begin: &params,
+            child_state: started.state,
+            terminal_events: crossterm::event::EventStream::new(),
+            log_paths: &log_paths,
+        })
+        .await?;
+        debug!("Closing TUI");
+    } else {
+        debug!("Using simple TUI");
+        simple_ui::run(simple_ui::Params {
+            initial_info: &started.start,
+            child_state: started.state,
+        })
+        .await?;
+    }
+
     Ok(())
 }
