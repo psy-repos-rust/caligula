@@ -86,12 +86,34 @@ pub fn confirm_write(
         debug!("Skipping confirm because of --force");
         Ok(true)
     } else {
-        println!("{}", begin_params);
+        print_begin_params(begin_params);
 
         Confirm::new("Is this okay?")
             .with_help_message("THIS ACTION WILL DESTROY ALL DATA ON THIS DEVICE!!!")
             .with_default(false)
             .prompt()
+    }
+}
+
+fn print_begin_params(params: &WriteVerifyParams) {
+    println!("Input: {}", params.input_file.to_string_lossy());
+    if params.compression.is_identity() {
+        println!("  Size: {}", params.input_file_size);
+    } else {
+        println!("  Size (compressed): {}", params.input_file_size);
+    }
+    println!("  Compression: {}", params.compression);
+    println!();
+
+    println!("Output: {}", params.target.name);
+    println!("  Model: {}", params.target.model);
+    println!("  Size: {}", params.target.size);
+    println!("  Block size: {}", params.target.block_size);
+    println!("  Type: {}", params.target.target_type);
+    println!("  Path: {}", params.target.devnode.to_string_lossy());
+
+    if params.target.target_type == crate::device::Type::Disk {
+        println!("  Removable: {}", params.target.removable);
     }
 }
 

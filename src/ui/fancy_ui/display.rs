@@ -1,64 +1,17 @@
 use std::time::Instant;
 
-use futures::{Stream, StreamExt};
 use ratatui::{
     Terminal,
-    backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
-use crate::{
-    logging::LogPaths,
-    orchestrator::{WriterState, watch::Watch},
-};
+use crate::{logging::LogPaths, orchestrator::WriterState};
 
 use super::{
-    state::{Quit, State, UIEvent},
+    state::State,
     widgets::{SpeedChart, WriterProgressBar, WritingInfoTable},
 };
-
-pub struct FancyUI<'a, B, S>
-where
-    B: Backend,
-    S: Stream<Item = UIEvent> + Unpin + 'a,
-{
-    pub terminal: &'a mut Terminal<B>,
-    pub events: S,
-    pub child_state: Watch<WriterState>,
-    pub state: State,
-    pub log_paths: &'a LogPaths,
-}
-
-impl<'a, B, S> FancyUI<'a, B, S>
-where
-    B: Backend,
-    S: Stream<Item = UIEvent> + Unpin + 'a,
-{
-    #[tracing::instrument(skip_all, level = "debug")]
-    pub async fn show(mut self) -> anyhow::Result<()> {
-        loop {
-            match self.get_and_handle_events().await {
-                Ok(s) => self = s,
-                Err(e) => match e.downcast::<Quit>()? {
-                    Quit => break,
-                },
-            }
-        }
-        Ok(())
-    }
-
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn get_and_handle_events(mut self) -> anyhow::Result<Self> {
-        while let Some(event) = self.events.next().await {
-            let child = self.child_state.borrow();
-            self.state = self.state.on_event(&child, event)?;
-
-            draw(&mut self.state, &child, self.terminal, &self.log_paths)?;
-        }
-        Ok(self)
-    }
-}
 
 struct ComputedLayout {
     progress: Rect,
@@ -112,12 +65,15 @@ fn centered_rect(r: Rect, w: u16, h: u16) -> Rect {
         .split(popup_layout[1])[1]
 }
 
+/// Draw the TUI.
 pub fn draw(
     state: &mut State,
     child: &WriterState,
     terminal: &mut Terminal<impl ratatui::backend::Backend>,
     log_paths: &LogPaths,
-) -> anyhow::Result<()> {
+) -> std::io::Result<()> {
+    terminal.autoresize()?;
+
     let progress_bar = WriterProgressBar::from_writer(&child);
 
     let final_time = match child {
@@ -166,5 +122,6 @@ pub fn draw(
             f.render_widget(qm, layout.quit_modal)
         }
     })?;
+
     Ok(())
 }

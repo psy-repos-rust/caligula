@@ -14,7 +14,7 @@ pub struct TUICapture {
 }
 
 impl TUICapture {
-    pub fn new() -> anyhow::Result<Self> {
+    pub fn new() -> std::io::Result<Self> {
         // setup terminal
         enable_raw_mode()?;
         let mut stdout = std::io::stdout();

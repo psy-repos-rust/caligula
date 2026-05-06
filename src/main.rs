@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 use clap::{CommandFactory as _, Parser};
 use tracing::debug;
+
+use crate::orchestrator::make_orchestrator_impl;
 
 mod byteseries;
 mod compression;
@@ -13,6 +17,7 @@ mod ipc_common;
 mod logging;
 mod native;
 mod orchestrator;
+mod runtime;
 mod tty;
 mod ui;
 mod util;
@@ -43,8 +48,7 @@ pub struct HerderDaemonArgs {
     log_file: String,
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let args: Args = match std::env::var("_CALIGULA_CONFIGURE_CLAP_FOR_README") {
         Ok(var) if var == "1" => parse_args_for_readme_generation(),
         _ => Args::parse(),
@@ -52,19 +56,22 @@ async fn main() {
 
     match args.command {
         Command::Burn(burn_args) => {
-            let state_dir = util::ensure_state_dir().await.unwrap();
+            let state_dir = util::ensure_state_dir().unwrap();
             let log_paths = logging::LogPaths::init(&state_dir);
             logging::init_logging_parent(&log_paths);
 
+            let runtime = crate::runtime::AsyncRuntime::start();
+            let orc = Arc::new(make_orchestrator_impl(log_paths.main()));
+
             debug!("Starting primary process");
-            match ui::main(&state_dir, log_paths.into(), &burn_args).await {
+            match ui::main(runtime, orc, log_paths.into(), burn_args) {
                 Ok(_) => (),
                 Err(e) => handle_toplevel_error(e),
             }
         }
         Command::HerderDaemon(args) => {
             logging::init_logging_child(args.log_file);
-            herder_daemon::main().await;
+            herder_daemon::main();
         }
     }
 }
