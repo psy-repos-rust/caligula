@@ -58,22 +58,20 @@ pub fn begin_writing(
     log_paths: Arc<LogPaths>,
 ) -> anyhow::Result<()> {
     if interactive.is_interactive() {
-        runtime
-            .spawn(move || async move {
-                let mut tui = TUICapture::new()?;
-                let terminal = tui.terminal();
-                // create app and run it
-                fancy_ui::run(fancy_ui::Params {
-                    terminal,
-                    begin: &params,
-                    child_state: started.state,
-                    terminal_events: crossterm::event::EventStream::new(),
-                    log_paths: &log_paths,
-                })
-                .await
-            })
-            .blocking_recv()
-            .expect("runtime failed")
+        let mut tui = TUICapture::new()?;
+        let terminal = tui.terminal();
+        // create app and run it
+        fancy_ui::run(
+            runtime,
+            fancy_ui::Params {
+                terminal,
+                begin: &params,
+                child_state: started.state,
+                terminal_events: crossterm::event::EventStream::new(),
+                log_paths: &log_paths,
+            },
+        );
+        Ok(())
     } else {
         runtime
             .spawn(move || async move {

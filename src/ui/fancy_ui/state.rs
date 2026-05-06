@@ -1,3 +1,5 @@
+//! UI state along with its reactor.
+
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use tracing::info;
 
@@ -29,12 +31,15 @@ impl State {
         }
     }
 
+    /// Handle the UI event, given the current state of the writer process.
+    ///
+    /// Returns [`Self`], or [`None`] to signal completion.
     #[tracing::instrument(skip_all, level = "debug", fields(ev))]
-    pub fn on_event(self, child: &WriterState, ev: UIEvent) -> anyhow::Result<Self> {
-        Ok(match ev {
-            UIEvent::SleepTimeout => self,
-            UIEvent::RecvTermEvent(e) => self.on_term_event(child, e)?,
-        })
+    pub fn on_event(self, child: &WriterState, ev: UIEvent) -> Option<Self> {
+        match ev {
+            UIEvent::SleepTimeout => Some(self),
+            UIEvent::RecvTermEvent(e) => self.on_term_event(child, e),
+        }
     }
 
     #[tracing::instrument(skip_all, level = "debug", fields(ev))]
@@ -42,7 +47,7 @@ impl State {
         self,
         child: &WriterState,
         ev: Result<Event, (String, std::io::ErrorKind)>,
-    ) -> anyhow::Result<Self> {
+    ) -> Option<Self> {
         match ev {
             Ok(Event::Key(KeyEvent {
                 kind: KeyEventKind::Press,
@@ -52,9 +57,9 @@ impl State {
             })) => self.handle_key_down(child, code, modifiers),
             Err((msg, kind)) => {
                 tracing::error!("Error getting term event ({kind}): {msg}");
-                Err(Quit)?
+                None
             }
-            _ => Ok(self),
+            _ => Some(self),
         }
     }
 
@@ -63,15 +68,15 @@ impl State {
         child: &WriterState,
         kc: KeyCode,
         km: KeyModifiers,
-    ) -> anyhow::Result<Self> {
+    ) -> Option<Self> {
         if let Some(qm) = &self.quit_modal {
             return match qm.handle_key_down(kc) {
-                Some(QuitModalResult::Quit) => Err(Quit.into()),
-                Some(QuitModalResult::Stay) => Ok(Self {
+                Some(QuitModalResult::Quit) => None,
+                Some(QuitModalResult::Stay) => Some(Self {
                     quit_modal: None,
                     ..self
                 }),
-                None => Ok(self),
+                None => Some(self),
             };
         }
 
@@ -81,18 +86,14 @@ impl State {
             | (KeyCode::Char('q'), _) => {
                 if child.is_finished() {
                     info!("Writing and verification finished; quitting immediately");
-                    Err(Quit.into())
+                    None
                 } else {
                     info!("Got request to quit, spawning prompt");
                     self.quit_modal = Some(QuitModal::new());
-                    Ok(self)
+                    Some(self)
                 }
             }
-            _ => Ok(self),
+            _ => Some(self),
         }
     }
 }
-
-#[derive(Debug, thiserror::Error)]
-#[error("User sent quit signal")]
-pub struct Quit;
