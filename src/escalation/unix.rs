@@ -27,8 +27,8 @@ pub struct Command<'a> {
 }
 
 impl EscalationMethod {
-    // Order is relevant here. Since this array is enumerated in `EscalationMethod::detect()`
-    // The first esalation found tool will be used
+    // Order is relevant here. Since this array is enumerated in
+    // `EscalationMethod::detect()` The first esalation found tool will be used
     const ALL: [EscalationMethod; 4] = [Self::Sudo, Self::Doas, Self::Run0, Self::Su];
 
     pub fn detect() -> Result<Self, EscalationError> {

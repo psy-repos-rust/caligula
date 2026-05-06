@@ -43,7 +43,7 @@ pub fn ask_compression(args: &BurnArgs) -> anyhow::Result<CompressionFormat> {
     }
     let format = Select::new("What format to use?", AVAILABLE_FORMATS.to_vec()).prompt()?;
 
-    return Ok(format);
+    Ok(format)
 }
 
 #[tracing::instrument(skip_all)]

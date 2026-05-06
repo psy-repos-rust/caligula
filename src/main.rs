@@ -37,8 +37,9 @@ pub enum Command {
 
     /// INTERNAL ONLY!
     ///
-    /// This is a backend entrypoint that is used in implementing automatic root escalation.
-    /// There are ZERO stability guarantees. Do NOT rely on this interface for anything.
+    /// This is a backend entrypoint that is used in implementing automatic root
+    /// escalation. There are ZERO stability guarantees. Do NOT rely on this
+    /// interface for anything.
     #[command(name = "_herder", hide = true)]
     HerderDaemon(HerderDaemonArgs),
 }
@@ -91,8 +92,8 @@ fn handle_toplevel_error(err: anyhow::Error) {
     }
 }
 
-/// Parse [Args] from the provided args, but format the help in an easy way for generating
-/// the section in the README.md.
+/// Parse [Args] from the provided args, but format the help in an easy way for
+/// generating the section in the README.md.
 fn parse_args_for_readme_generation() -> Args {
     use clap::FromArgMatches;
 
@@ -109,8 +110,8 @@ fn parse_args_for_readme_generation() -> Args {
     match res {
         Ok(s) => s,
         Err(e) => {
-            // Since this is more of a development-time error, we aren't doing as fancy of a quit
-            // as `get_matches`
+            // Since this is more of a development-time error, we aren't doing as fancy of a
+            // quit as `get_matches`
             e.exit()
         }
     }

@@ -6,12 +6,11 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
-use crate::{logging::LogPaths, orchestrator::WriterState};
-
 use super::{
     state::State,
     widgets::{SpeedChart, WriterProgressBar, WritingInfoTable},
 };
+use crate::{logging::LogPaths, orchestrator::WriterState};
 
 struct ComputedLayout {
     progress: Rect,
@@ -44,7 +43,8 @@ impl From<Rect> for ComputedLayout {
     }
 }
 
-/// Given an outer rect and desired inner rect dimensions, returns the inner rect.
+/// Given an outer rect and desired inner rect dimensions, returns the inner
+/// rect.
 fn centered_rect(r: Rect, w: u16, h: u16) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
@@ -74,7 +74,7 @@ pub fn draw(
 ) -> std::io::Result<()> {
     terminal.autoresize()?;
 
-    let progress_bar = WriterProgressBar::from_writer(&child);
+    let progress_bar = WriterProgressBar::from_writer(child);
 
     let final_time = match child {
         WriterState::Finished { finish_time, .. } => *finish_time,
@@ -89,11 +89,11 @@ pub fn draw(
     let info_table = WritingInfoTable {
         input_filename: &state.input_filename,
         target_filename: &state.target_filename,
-        state: &child,
+        state: child,
     };
 
     let speed_chart = SpeedChart {
-        state: &child,
+        state: child,
         final_time,
     };
 

@@ -1,3 +1,8 @@
+use std::{fs::File, path::PathBuf, time::Instant};
+
+use bytesize::ByteSize;
+use tracing::{info, trace};
+
 use super::watch::Watch;
 use crate::{
     byteseries::{ByteSeries, EstimatedTime},
@@ -5,10 +10,6 @@ use crate::{
     device::WriteTarget,
     herder_api::write_verify::*,
 };
-use bytesize::ByteSize;
-use std::time::Instant;
-use std::{fs::File, path::PathBuf};
-use tracing::{info, trace};
 
 /// Params for starting a write + verify workflow.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -253,9 +254,8 @@ impl Writing {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use crate::{byteseries::ByteSeries, herder_api::write_verify::*};
-
     use super::WriterState;
+    use crate::{byteseries::ByteSeries, herder_api::write_verify::*};
 
     #[test]
     fn accept_total_bytes_messages() {

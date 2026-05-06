@@ -1,26 +1,25 @@
 //! This module has logic for the child process that writes to the disk.
 //!
-//! IT IS NOT TO BE USED DIRECTLY BY THE USER! ITS API HAS NO STABILITY GUARANTEES!
+//! IT IS NOT TO BE USED DIRECTLY BY THE USER! ITS API HAS NO STABILITY
+//! GUARANTEES!
 
-use std::fs::OpenOptions;
-use std::os::unix::process::ExitStatusExt;
-use std::process::{Command, Stdio};
-use std::thread::JoinHandle;
 use std::{
-    fs::File,
+    fs::{File, OpenOptions},
     io::{self, Read, Seek, Write},
+    os::unix::process::ExitStatusExt,
+    process::{Command, Stdio},
+    thread::JoinHandle,
 };
 
 use aligned_vec::avec_rt;
 use tracing::{debug, info, trace};
 use tracing_unwrap::ResultExt;
 
-use crate::compression::CompressionFormat;
-use crate::device;
-use crate::herder_api::write_verify::*;
-
-use self::utils::{CountRead, CountWrite, FileSourceReader, SyncDataFile};
-use self::xplat::open_blockdev;
+use self::{
+    utils::{CountRead, CountWrite, FileSourceReader, SyncDataFile},
+    xplat::open_blockdev,
+};
+use crate::{compression::CompressionFormat, device, herder_api::write_verify::*};
 
 #[cfg(test)]
 mod tests;
@@ -30,7 +29,8 @@ mod xplat;
 /// Maximum size we may allocate for each buffer.
 const MAX_BUF_SIZE: usize = 1 << 20; // 1MiB
 
-/// How many bytes should be written before we perform a checkpoint (aka report progress).
+/// How many bytes should be written before we perform a checkpoint (aka report
+/// progress).
 const CHECKPOINT_BYTES: usize = 8 * (1 << 20); // 8MiB
 
 pub fn spawn_writer(
@@ -233,7 +233,8 @@ impl<S: Read, D: Write> WriteOp<S, D> {
     }
 }
 
-/// Like [`ReadExt::read_exact`], but if it can't fill the entire buffer, it does not error.
+/// Like [`ReadExt::read_exact`], but if it can't fill the entire buffer, it
+/// does not error.
 #[inline(always)]
 fn try_read_exact(r: &mut impl Read, mut buf: &mut [u8]) -> std::io::Result<usize> {
     // modified from rust stdlib file src/io/mod.rs

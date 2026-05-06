@@ -1,3 +1,5 @@
+use std::{pin::pin, time::Duration};
+
 use futures::{Stream, StreamExt as _, stream};
 use ratatui::{Terminal, prelude::Backend};
 use tokio::sync::mpsc;
@@ -9,7 +11,6 @@ use crate::{
     runtime::RemoteSpawn,
     ui::fancy_ui::{display::draw, state::State},
 };
-use std::{pin::pin, time::Duration};
 
 mod display;
 mod state;
