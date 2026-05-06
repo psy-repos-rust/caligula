@@ -1,5 +1,9 @@
+use std::sync::Arc;
+
 use clap::{CommandFactory as _, Parser};
 use tracing::debug;
+
+use crate::orchestrator::make_orchestrator_impl;
 
 mod byteseries;
 mod compression;
@@ -56,8 +60,11 @@ fn main() {
             let log_paths = logging::LogPaths::init(&state_dir);
             logging::init_logging_parent(&log_paths);
 
+            let runtime = crate::runtime::AsyncRuntime::start();
+            let orc = Arc::new(make_orchestrator_impl(log_paths.main()));
+
             debug!("Starting primary process");
-            match ui::main(&state_dir, log_paths.into(), burn_args) {
+            match ui::main(runtime, orc, log_paths.into(), burn_args) {
                 Ok(_) => (),
                 Err(e) => handle_toplevel_error(e),
             }
