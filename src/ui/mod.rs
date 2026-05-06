@@ -19,7 +19,7 @@ use tracing::{debug, info};
 /// Entrypoint for both TUI-based UIs.
 pub fn main(
     runtime: impl RemoteSpawn,
-    orc: Arc<impl Orchestrator + Send + Sync + 'static>,
+    orc: Arc<impl Orchestrator>,
     log_paths: Arc<LogPaths>,
     args: BurnArgs,
 ) -> anyhow::Result<()> {

@@ -81,7 +81,7 @@ pub fn find_hash_in_user_file<'a>(
     input: &Path,
     hash_filepath: &'a Path,
 ) -> Option<(Vec<HashAlg>, &'a str, Vec<u8>)> {
-    match File::open(&hash_filepath) {
+    match File::open(hash_filepath) {
         Ok(file) => match parse_hashfile(BufReader::new(file), input.file_name()?.to_str()?) {
             Ok(Some(expected_hash)) => {
                 return Some((

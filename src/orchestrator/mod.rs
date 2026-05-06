@@ -57,7 +57,7 @@ pub trait Orchestrator: Sync + Send + 'static {
 }
 
 /// Make the actual prod-used orchestrator implementation.
-pub fn make_orchestrator_impl(log_path: &str) -> impl Orchestrator + Send + Sync + 'static {
+pub fn make_orchestrator_impl(log_path: &str) -> impl Orchestrator {
     self::real::OrchestratorImpl::new(herder_facade::make_herder_facade_impl(log_path))
 }
 

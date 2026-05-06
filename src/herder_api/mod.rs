@@ -71,4 +71,4 @@ macro_rules! impl_try_from_top_level_herd_event {
     };
 }
 
-pub(self) use impl_try_from_top_level_herd_event;
+use impl_try_from_top_level_herd_event;

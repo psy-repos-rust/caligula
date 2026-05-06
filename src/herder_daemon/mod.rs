@@ -18,7 +18,7 @@ mod writer_process;
 pub fn main() {
     let runtime = crate::runtime::AsyncRuntime::start();
     runtime
-        .spawn(|| async_main())
+        .spawn(async_main)
         .blocking_recv()
         .expect("Daemon failed!");
 }

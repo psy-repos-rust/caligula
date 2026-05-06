@@ -74,7 +74,7 @@ pub fn draw(
 ) -> std::io::Result<()> {
     terminal.autoresize()?;
 
-    let progress_bar = WriterProgressBar::from_writer(&child);
+    let progress_bar = WriterProgressBar::from_writer(child);
 
     let final_time = match child {
         WriterState::Finished { finish_time, .. } => *finish_time,
@@ -89,11 +89,11 @@ pub fn draw(
     let info_table = WritingInfoTable {
         input_filename: &state.input_filename,
         target_filename: &state.target_filename,
-        state: &child,
+        state: child,
     };
 
     let speed_chart = SpeedChart {
-        state: &child,
+        state: child,
         final_time,
     };
 

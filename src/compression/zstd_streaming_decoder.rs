@@ -29,7 +29,7 @@
 use core::borrow::BorrowMut;
 
 use ruzstd::frame_decoder::{BlockDecodingStrategy, FrameDecoder, FrameDecoderError};
-use ruzstd::io::{Error, ErrorKind, Read};
+use ruzstd::io::{Error, Read};
 
 /// High level decoder that implements a io::Read that can be used with
 /// io::Read::read_to_end / io::Read::read_exact or passing this to another library / module as a source for the decoded content
@@ -126,7 +126,7 @@ impl<READ: Read, DEC: BorrowMut<FrameDecoder>> Read for StreamingDecoder<READ, D
             ) {
                 Ok(_) => { /*Nothing to do*/ }
                 Err(e) => {
-                    let err = Error::new(ErrorKind::Other, e);
+                    let err = Error::other(e);
                     return Err(err);
                 }
             }

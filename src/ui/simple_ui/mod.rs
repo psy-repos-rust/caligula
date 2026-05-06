@@ -101,18 +101,18 @@ pub fn try_start_write_or_escalate(
 
                 if response {
                     orc.clone().escalate_blocking(runtime, None)?;
-                    return Ok(orc.start_write_verify_blocking(runtime, args.clone())?);
+                    return orc.start_write_verify_blocking(runtime, args.clone());
                 }
             }
             (UseSudo::Always, _) => {
                 orc.clone().escalate_blocking(runtime, None)?;
-                return Ok(orc.start_write_verify_blocking(runtime, args.clone())?);
+                return orc.start_write_verify_blocking(runtime, args.clone());
             }
             _ => {}
         }
     }
 
-    Err(err.into())
+    Err(err)
 }
 
 /// Run the simple TUI.

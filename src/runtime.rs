@@ -18,7 +18,7 @@ pub trait RemoteSpawn {
         Fut: Future<Output = T> + 'static;
 }
 
-impl<'a, Sp: RemoteSpawn> RemoteSpawn for &'a Sp {
+impl<Sp: RemoteSpawn> RemoteSpawn for &Sp {
     fn spawn<Fut, T>(&self, f: impl FnOnce() -> Fut + Send + 'static) -> oneshot::Receiver<T>
     where
         T: Send + 'static,

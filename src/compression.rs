@@ -90,6 +90,7 @@ macro_rules! generate {
             }
         }
 
+        #[expect(clippy::large_enum_variant, reason = "eh whatever who cares")]
         pub enum DecompressRead<$reader_typename: BufRead> {
             Identity($reader_typename),
             $(

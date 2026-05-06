@@ -163,11 +163,8 @@ impl<K: Hash + Eq, T> EventDemuxMap<K, T> {
             },
             Entry::Vacant(e) => {
                 let (tx, rx) = mpsc::unbounded_channel();
-                match tx.send(t) {
-                    Ok(_) => {
-                        e.insert((tx, Some(rx)));
-                    }
-                    Err(_) => (),
+                if tx.send(t).is_ok() {
+                    e.insert((tx, Some(rx)));
                 }
             }
         }

@@ -274,14 +274,14 @@ mod helpers {
     impl<'a> Write for MockWrite<'a> {
         fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
             assert!(
-                buf.len() % self.enforced_block_size == 0,
+                buf.len().is_multiple_of(self.enforced_block_size),
                 "Received a write (size {len} = {len:#x}) that was not aligned to block (size {bs} = {bs:#x})!",
                 len = buf.len(),
                 bs = self.enforced_block_size,
             );
             let addr = buf.as_ptr();
             assert!(
-                addr as usize % self.enforced_block_size == 0,
+                (addr as usize).is_multiple_of(self.enforced_block_size),
                 "Received a write from address {len:?} that was not aligned to block (size {bs} = {bs:#x})!",
                 len = addr,
                 bs = self.enforced_block_size,
@@ -316,13 +316,13 @@ mod helpers {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             if let Some(bs) = &self.enforced_block_size {
                 assert!(
-                    buf.len() % bs == 0,
+                    buf.len().is_multiple_of(*bs),
                     "Received a read (size {len} = {len:#x}) that was not aligned to blocks (size {bs} = {bs:#x})!",
                     len = buf.len(),
                     bs = bs,
                 );
                 assert!(
-                    ((&buf[0] as *const u8) as usize) % bs == 0,
+                    ((&buf[0] as *const u8) as usize).is_multiple_of(*bs),
                     "Received a read to address {len:?} that was not aligned to block (size {bs} = {bs:#x})!",
                     len = &buf[0] as *const u8,
                     bs = bs,

@@ -226,7 +226,7 @@ mod tests {
     async fn test_lazy_herder_client_factory_failure() {
         let (_, mut client) = setup_lazy_herder_client_test_harness(|_| {
             let r: Result<MockHerderClient, DaemonError> = Err(DaemonError::TransportFailure(
-                std::io::Error::new(std::io::ErrorKind::Other, "transport unexpectedly closed"),
+                std::io::Error::other("transport unexpectedly closed"),
             ));
             r
         });
@@ -242,11 +242,9 @@ mod tests {
     async fn test_lazy_herder_client_retry() {
         let (counters, mut client) = setup_lazy_herder_client_test_harness(|counters| {
             if counters.factory_call_count.load(Ordering::SeqCst) == 0 {
-                let result: Result<MockHerderClient, DaemonError> =
-                    Err(DaemonError::TransportFailure(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "first call fails",
-                    )));
+                let result: Result<MockHerderClient, DaemonError> = Err(
+                    DaemonError::TransportFailure(std::io::Error::other("first call fails")),
+                );
                 result
             } else {
                 Ok(MockHerderClient {
