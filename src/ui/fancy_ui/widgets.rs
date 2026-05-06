@@ -13,10 +13,10 @@ use ratatui::{
     },
 };
 
-use crate::orchestrator::WriterState;
+use crate::orchestrator::WriterVerifyState;
 
 pub struct SpeedChart<'a> {
-    pub state: &'a WriterState,
+    pub state: &'a WriterVerifyState,
     pub final_time: Instant,
 }
 
@@ -133,9 +133,9 @@ pub struct WriterProgressBar {
 }
 
 impl WriterProgressBar {
-    pub fn from_writer(state: &WriterState) -> WriterProgressBar {
+    pub fn from_writer(state: &WriterVerifyState) -> WriterProgressBar {
         match state {
-            WriterState::Writing(st) => WriterProgressBar {
+            WriterVerifyState::Writing(st) => WriterProgressBar {
                 bytes_written: st.write_hist.bytes_encountered(),
                 label_state: "Burning...",
                 style: Style::default().fg(Color::Yellow),
@@ -143,7 +143,7 @@ impl WriterProgressBar {
                 display_total_bytes: st.total_raw_bytes,
             },
 
-            WriterState::Verifying {
+            WriterVerifyState::Verifying {
                 verify_hist,
                 total_write_bytes,
                 ..
@@ -154,20 +154,20 @@ impl WriterProgressBar {
                 Style::default().fg(Color::Blue).bg(Color::Yellow),
             ),
 
-            WriterState::Finished {
+            WriterVerifyState::Finished {
                 write_hist,
-                error,
+                result,
                 total_write_bytes,
                 ..
             } => WriterProgressBar::from_simple(
                 write_hist.bytes_encountered(),
                 *total_write_bytes,
-                if error.is_some() {
+                if result.is_err() {
                     "Error!"
                 } else {
                     "Done! Press q to quit."
                 },
-                if error.is_some() {
+                if result.is_err() {
                     Style::default().fg(Color::White).bg(Color::Red)
                 } else {
                     Style::default().fg(Color::Green).bg(Color::Black)
@@ -224,7 +224,7 @@ impl WriterProgressBar {
 pub struct WritingInfoTable<'a> {
     pub input_filename: &'a str,
     pub target_filename: &'a str,
-    pub state: &'a WriterState,
+    pub state: &'a WriterVerifyState,
 }
 
 impl WritingInfoTable<'_> {
@@ -241,13 +241,13 @@ impl WritingInfoTable<'_> {
         ];
 
         match &self.state {
-            WriterState::Writing(st) => {
+            WriterVerifyState::Writing(st) => {
                 rows.push(Row::new([
                     Cell::from("ETA Write"),
                     Cell::from(format!("{}", st.eta_write())),
                 ]));
             }
-            WriterState::Verifying {
+            WriterVerifyState::Verifying {
                 verify_hist: vdata,
                 total_write_bytes,
                 ..
@@ -261,7 +261,7 @@ impl WritingInfoTable<'_> {
                     Cell::from(format!("{}", vdata.estimated_time_left(*total_write_bytes))),
                 ]));
             }
-            WriterState::Finished {
+            WriterVerifyState::Finished {
                 verify_hist: vdata, ..
             } => {
                 if let Some(vdata) = vdata {

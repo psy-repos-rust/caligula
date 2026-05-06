@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use self::state::UIEvent;
 use crate::{
     logging::LogPaths,
-    orchestrator::{WriteVerifyParams, WriterState, watch::Watch},
+    orchestrator::{WriteVerifyParams, WriterVerifyState, watch::Watch},
     runtime::RemoteSpawn,
     ui::fancy_ui::{display::draw, state::State},
 };
@@ -26,7 +26,7 @@ where
 {
     pub terminal: &'a mut Terminal<B>,
     pub begin: &'a WriteVerifyParams,
-    pub child_state: Watch<WriterState>,
+    pub child_state: Watch<WriterVerifyState>,
     pub terminal_events: T,
     pub log_paths: &'a LogPaths,
 }
@@ -88,7 +88,7 @@ fn draw_loop(
     terminal: &mut Terminal<impl Backend>,
     mut state: State,
     events: impl IntoIterator<Item = UIEvent>,
-    child: Watch<WriterState>,
+    child: Watch<WriterVerifyState>,
     log_paths: &LogPaths,
 ) {
     for ev in events {

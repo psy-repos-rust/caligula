@@ -5,9 +5,9 @@ use std::{path::PathBuf, sync::Arc};
 
 pub use self::{
     disks::DiskList,
-    hash::{HashError, HashStarted, StartHashParams},
+    hash::{HashStarted, StartHashParams},
     herder_facade::{DaemonError, StartWriterError},
-    write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterState},
+    write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterVerifyState},
 };
 use crate::{
     escalation::EscalationMethod, herder_api::write_verify::*,

@@ -7,9 +7,9 @@ use crate::{
     escalation::EscalationMethod,
     herder_api::write_verify::WriteVerifyEvent,
     orchestrator::{
-        DiskList, Orchestrator, WriteVerifyParams, WriteVerifyStarted, WriterState,
+        DiskList, Orchestrator, WriteVerifyParams, WriteVerifyStarted, WriterVerifyState,
         analyze_input::InputAnalysis,
-        hash::{HashError, HashStarted, StartHashParams},
+        hash::{HashStarted, StartHashParams},
         watch::Watch,
     },
 };
@@ -52,7 +52,7 @@ impl<H: HerderFacade + Send + 'static> Orchestrator for OrchestratorImpl<H> {
         drop(inner);
 
         // create state reduction task
-        let (tx_state, rx_state) = tokio::sync::watch::channel(WriterState::initial(
+        let (tx_state, rx_state) = tokio::sync::watch::channel(WriterVerifyState::initial(
             Instant::now(),
             !params.compression.is_identity(),
             handle.initial_info.input_file_bytes,
