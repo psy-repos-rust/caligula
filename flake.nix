@@ -72,6 +72,7 @@
                   lz4
                   nixfmt
                   python3
+                  taplo
                   xz
                 ]);
             }

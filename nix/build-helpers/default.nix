@@ -41,8 +41,10 @@
           writeShellApplication {
             name = "lint.sh";
             runtimeInputs = [
-              bash
               baseToolchain
+              bash
+              nixfmt
+              taplo
             ]
             # own system's build inputs
             ++ (perTarget system).buildInputs;
