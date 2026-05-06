@@ -55,8 +55,8 @@ impl WriteVerifyParams {
     }
 }
 
-/// A state machine for tracking the state of the writer and verifier, based on received
-/// messages.
+/// A state machine for tracking the state of the writer and verifier, based on
+/// received messages.
 #[derive(Debug, Clone, PartialEq)]
 pub enum WriterVerifyState {
     Writing(Writing),
@@ -328,7 +328,9 @@ mod tests {
 
         match s {
             WriterVerifyState::Finished {
-                finish_time, result: error, ..
+                finish_time,
+                result: error,
+                ..
             } => {
                 assert_eq!(finish_time - t0, Duration::from_secs(2));
                 assert_eq!(error, Err(WriteVerifyError::UnexpectedTermination));

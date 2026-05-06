@@ -28,7 +28,7 @@ impl Eq for CompressionCandidate {}
 
 impl PartialOrd for CompressionCandidate {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -60,7 +60,7 @@ impl Eq for HashFile {}
 
 impl PartialOrd for HashFile {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 

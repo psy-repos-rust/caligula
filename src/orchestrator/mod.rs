@@ -43,27 +43,29 @@ mod write_verify;
 /// new UI developments.
 pub trait Orchestrator: Sync + Send + 'static {
     /// Analyze an input file to guess how we should handle it.
-    /// 
-    /// Returns the results of the analysis, or an error if the file could not be read.
-    /// This method is fault-tolerant, so the only errors that can cause this operation to fail
-    /// are I/O errors.
-    /// 
-    /// The intended workflow is that you call it once, to fill up your UI's wizard with data,
-    /// and then ask the user for more information if there's anything that's not certain.
+    ///
+    /// Returns the results of the analysis, or an error if the file could not
+    /// be read. This method is fault-tolerant, so the only errors that can
+    /// cause this operation to fail are I/O errors.
+    ///
+    /// The intended workflow is that you call it once, to fill up your UI's
+    /// wizard with data, and then ask the user for more information if
+    /// there's anything that's not certain.
     #[expect(unused, reason = "Stub interface created for later use.")]
     async fn analyze_input(&self, input: PathBuf) -> std::io::Result<InputAnalysis>;
 
     /// Get a handle for watching the list of disks available. This may update
     /// as disks are added and removed to the system.
-    /// 
-    /// Although this returns a handle immediately, the initial results may take a while to load.
+    ///
+    /// Although this returns a handle immediately, the initial results may take
+    /// a while to load.
     #[expect(unused, reason = "Stub interface created for later use.")]
     fn watch_disks(&self) -> watch::Watch<DiskList>;
 
     /// Read a file and calculate its hash in a background thread.
-    /// 
-    /// Returns when the file is opened and the thread is running, with a handle to watch its progress,
-    /// or an error if the file could not be opened.
+    ///
+    /// Returns when the file is opened and the thread is running, with a handle
+    /// to watch its progress, or an error if the file could not be opened.
     #[expect(unused, reason = "Stub interface created for later use.")]
     async fn start_hash(&self, params: StartHashParams) -> std::io::Result<HashStarted>;
 

@@ -6,16 +6,19 @@
 //!
 //! Consider the task of determining what kind of file format a file has.
 //!
-//! - We can guess that the file is gzipped if it has a `.gz` extension, which can give us 24 bits of certainty:
-//!   eight for each byte in the extension.
-//! - If we find that the file in fact starts with `1f 8b`, the magic number for gzip, we can assign it
-//!   16 bits of certainty plus an additional fudge factor, maybe `PATH_MAX * 8`, for it being based on the actual
-//!   file contents rather than the file extension.
-//! - But then, if we happen to find `55 aa` at offset 510, designating a master boot record, that's now 16 bits of
-//!   certainty plus `PATH_MAX * 8` towards this file not being compressed at all!
+//! - We can guess that the file is gzipped if it has a `.gz` extension, which
+//!   can give us 24 bits of certainty: eight for each byte in the extension.
+//! - If we find that the file in fact starts with `1f 8b`, the magic number for
+//!   gzip, we can assign it 16 bits of certainty plus an additional fudge
+//!   factor, maybe `PATH_MAX * 8`, for it being based on the actual file
+//!   contents rather than the file extension.
+//! - But then, if we happen to find `55 aa` at offset 510, designating a master
+//!   boot record, that's now 16 bits of certainty plus `PATH_MAX * 8` towards
+//!   this file not being compressed at all!
 //!
-//! So now we have two reasons to guess that it's gzip, summing up to `16 + 24 + PATH_MAX * 8` bits of certainty,
-//! while we only have one reason to guess that it's a raw disk, summing up to `16 + PATH_MAX * 8`. The additional
+//! So now we have two reasons to guess that it's gzip, summing up to `16 + 24 +
+//! PATH_MAX * 8` bits of certainty, while we only have one reason to guess that
+//! it's a raw disk, summing up to `16 + PATH_MAX * 8`. The additional
 //! evidence from the file extension acts as a tiebreaker.
 
 use std::{
@@ -59,8 +62,8 @@ impl<T: Ord> Candidates<T> {
 /// A candidate value `T` combined with a list of [`Reason`]s it's listed as a
 /// candidate.
 ///
-/// The `T` must implement [`Ord`] to act as a tiebreaker in case there exist two candidates with the
-/// same certainty.
+/// The `T` must implement [`Ord`] to act as a tiebreaker in case there exist
+/// two candidates with the same certainty.
 pub struct Candidate<T: Ord> {
     value: T,
     reasons: Vec<Reason>,

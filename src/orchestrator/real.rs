@@ -82,8 +82,8 @@ impl<H: HerderFacade + Send + 'static> Orchestrator for OrchestratorImpl<H> {
     }
 
     fn is_escalated(&self) -> bool {
-        // TODO: this is badly implemented but it's good enough for writing new UIs against.
-        // It will be improved when we get rid of herder facade.
+        // TODO: this is badly implemented but it's good enough for writing new UIs
+        // against. It will be improved when we get rid of herder facade.
         let Ok(lock) = self.inner.try_lock() else {
             return false;
         };

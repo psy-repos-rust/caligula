@@ -1,7 +1,8 @@
 #![expect(unused, reason = "Stub interface created for later use.")]
 
-use bytes::Bytes;
 use std::{path::PathBuf, time::Instant};
+
+use bytes::Bytes;
 
 use crate::{
     byteseries::ByteSeries, compression::CompressionFormat, hash::HashAlg,
