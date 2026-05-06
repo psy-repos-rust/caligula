@@ -14,6 +14,7 @@ use crate::{
     tty::TermiosRestore,
     ui::{cli::Interactive, simple_ui::do_setup_wizard, utils::TUICapture},
 };
+use anyhow::Context;
 use tracing::{debug, info};
 
 /// Entrypoint for TUI-based UIs.
@@ -44,7 +45,8 @@ pub fn main(_state_dir: &Path, log_paths: Arc<LogPaths>, args: BurnArgs) -> anyh
         args.interactive.is_interactive(),
     )?;
 
-    begin_writing(runtime, args.interactive, begin_params, handle, log_paths)?;
+    begin_writing(runtime, args.interactive, begin_params, handle, log_paths)
+        .context("Failed to open TUI!")?;
 
     debug!("Done!");
     Ok(())
@@ -56,7 +58,7 @@ pub fn begin_writing(
     params: WriteVerifyParams,
     started: WriteVerifyStarted,
     log_paths: Arc<LogPaths>,
-) -> anyhow::Result<()> {
+) -> std::io::Result<()> {
     if interactive.is_interactive() {
         let mut tui = TUICapture::new()?;
         let terminal = tui.terminal();
@@ -71,17 +73,11 @@ pub fn begin_writing(
                 log_paths: &log_paths,
             },
         );
-        Ok(())
     } else {
-        runtime
-            .spawn(move || async move {
-                simple_ui::run(simple_ui::Params {
-                    initial_info: &started.start,
-                    child_state: started.state,
-                })
-                .await
-            })
-            .blocking_recv()
-            .expect("runtime failed")
+        simple_ui::run(simple_ui::Params {
+            child_state: started.state,
+            log_paths: &log_paths,
+        });
     }
+    Ok(())
 }

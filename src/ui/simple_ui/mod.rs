@@ -9,6 +9,7 @@ use self::ask_outfile::ask_compression;
 use self::ask_outfile::ask_outfile;
 use self::ask_outfile::confirm_write;
 use super::cli::BurnArgs;
+use crate::logging::LogPaths;
 use crate::{
     device::WriteTarget,
     herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent, WriteVerifyStart},
@@ -53,8 +54,8 @@ pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<WriteVerifyParams>, any
 }
 
 pub struct Params<'a> {
-    pub initial_info: &'a WriteVerifyStart,
     pub child_state: Watch<WriterState>,
+    pub log_paths: &'a LogPaths,
 }
 
 /// Attempt to start burning the disk with the given params.
@@ -116,36 +117,51 @@ pub fn try_start_write_or_escalate(
 
 /// Run the simple TUI.
 #[tracing::instrument(skip_all)]
-pub async fn run<'a>(params: Params<'a>) -> anyhow::Result<()> {
-    let input_file_bytes = params.initial_info.input_file_bytes;
-    let write_progress = ProgressBar::new(100).with_message("Burning").with_style(
+pub fn run<'a>(params: Params<'a>) {
+    let length = 80;
+    let write_progress = ProgressBar::new(length).with_message("Burning").with_style(
         ProgressStyle::with_template(
-            "[{elapsed_precise}] {msg:>10} {wide_bar:.green/black} {percent:>3}%",
+            "[{elapsed_precise}] {msg:>10} {wide_bar:.yellow/black} {percent:>3}%",
         )
         .unwrap(),
     );
-    let verify_progress = ProgressBar::new(100).with_message("Verifying").with_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {msg:>10} {wide_bar:.blue/black} {percent:>3}%",
-        )
-        .unwrap(),
-    );
+    let verify_progress = ProgressBar::new(length)
+        .with_message("Verifying")
+        .with_style(
+            ProgressStyle::with_template(
+                "[{elapsed_precise}] {msg:>10} {wide_bar:.blue/yellow} {percent:>3}%",
+            )
+            .unwrap(),
+        );
 
-    let mut interval = tokio::time::interval(REFRESH_PERIOD);
     loop {
-        interval.tick().await;
+        std::thread::sleep(REFRESH_PERIOD);
 
         let child_state = params.child_state.borrow();
         match &*child_state {
             WriterState::Writing(b) => {
-                write_progress.set_position((b.approximate_ratio() * 1000.0) as u64)
+                write_progress.set_position((b.approximate_ratio() * (length as f64)) as u64)
             }
             WriterState::Verifying {
-                total_write_bytes, ..
-            } => verify_progress.set_position(total_write_bytes * 1000 / input_file_bytes),
-            WriterState::Finished { .. } => break,
+                verify_hist,
+                total_write_bytes,
+                ..
+            } => {
+                let ratio = verify_hist.bytes_encountered() as f64 / *total_write_bytes as f64;
+                verify_progress.set_position((ratio * (length as f64)) as u64)
+            }
+            WriterState::Finished { error, .. } => {
+                match error {
+                    Some(error) => {
+                        println!("Error occurred while writing: {error}");
+                        println!("{}", params.log_paths.get_bug_report_msg());
+                    }
+                    None => {
+                        println!("Done!")
+                    }
+                }
+                break;
+            }
         }
     }
-    println!("Done!");
-    Ok(())
 }
