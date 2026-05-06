@@ -3,4 +3,4 @@
 set -euxo pipefail
 
 cargo fmt --check
-cargo clippy
+cargo clippy -- -D warnings
