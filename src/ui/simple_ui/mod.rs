@@ -12,7 +12,7 @@ use super::cli::BurnArgs;
 use crate::logging::LogPaths;
 use crate::{
     device::WriteTarget,
-    herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent, WriteVerifyStart},
+    herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent},
     orchestrator::{
         Orchestrator, OrchestratorExt, StartWriterError, WriteVerifyParams, WriteVerifyStarted,
         WriterState, watch::Watch,

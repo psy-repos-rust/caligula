@@ -22,6 +22,7 @@ pub struct WriteVerifyParams {
 /// Result of starting a write + verify workflow.
 #[derive(Debug, Clone)]
 pub struct WriteVerifyStarted {
+    #[expect(dead_code)]
     pub start: WriteVerifyStart,
     pub state: Watch<WriterState>,
 }
@@ -132,7 +133,7 @@ impl WriterState {
                 self.into_finished(now, Some(WriteVerifyError::UnexpectedTermination))
             }
             other => panic!(
-                "Received nexpected child status {:#?}\nCurrent state: {:#?}",
+                "Received unexpected child status {:#?}\nCurrent state: {:#?}",
                 other, self
             ),
         }
