@@ -1,10 +1,12 @@
-use crate::hash::HashAlg;
-use anyhow::anyhow;
 use std::{
     fs::File,
     io::{BufRead, BufReader},
     path::Path,
 };
+
+use anyhow::anyhow;
+
+use crate::hash::HashAlg;
 
 /// Common filenames of hash files.
 const HASH_FILES: &[(HashAlg, &str)] = &[
@@ -121,8 +123,9 @@ fn parse_hashfile(hash_file: impl BufRead, input_file: &str) -> anyhow::Result<O
 
 #[cfg(test)]
 mod tests {
-    use super::parse_hashfile;
     use std::io::Cursor;
+
+    use super::parse_hashfile;
 
     #[test]
     fn parse_simple_hashfile() {

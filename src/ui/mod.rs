@@ -5,8 +5,9 @@ mod utils;
 
 use std::{fs::File, sync::Arc};
 
-pub use self::cli::BurnArgs;
-pub use self::utils::ByteSpeed;
+use tracing::{debug, info};
+
+pub use self::{cli::BurnArgs, utils::ByteSpeed};
 use crate::{
     logging::LogPaths,
     orchestrator::Orchestrator,
@@ -14,7 +15,6 @@ use crate::{
     tty::TermiosRestore,
     ui::{simple_ui::do_setup_wizard, utils::TUICapture},
 };
-use tracing::{debug, info};
 
 /// Entrypoint for both TUI-based UIs.
 pub fn main(

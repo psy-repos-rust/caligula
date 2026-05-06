@@ -6,12 +6,11 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Wrap},
 };
 
-use crate::{logging::LogPaths, orchestrator::WriterState};
-
 use super::{
     state::State,
     widgets::{SpeedChart, WriterProgressBar, WritingInfoTable},
 };
+use crate::{logging::LogPaths, orchestrator::WriterState};
 
 struct ComputedLayout {
     progress: Rect,
@@ -44,7 +43,8 @@ impl From<Rect> for ComputedLayout {
     }
 }
 
-/// Given an outer rect and desired inner rect dimensions, returns the inner rect.
+/// Given an outer rect and desired inner rect dimensions, returns the inner
+/// rect.
 fn centered_rect(r: Rect, w: u16, h: u16) -> Rect {
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)

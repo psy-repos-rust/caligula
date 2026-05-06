@@ -1,9 +1,10 @@
-use self::helpers::*;
-use super::*;
 use assert_matches::assert_matches;
 use pretty_assertions::assert_eq;
 use rand::{SeedableRng, rngs::SmallRng};
 use rstest::*;
+
+use self::helpers::*;
+use super::*;
 
 #[test]
 fn write_op_works_with_emitted_events() {
@@ -254,7 +255,8 @@ mod helpers {
     use super::{CompressionFormat, VerifyOp, WriteOp};
     use crate::herder_api::write_verify::*;
 
-    /// Wraps an in-memory buffer and logs every single chunk of data written to it.
+    /// Wraps an in-memory buffer and logs every single chunk of data written to
+    /// it.
     struct MockWrite<'a> {
         cursor: Cursor<&'a mut [u8]>,
         requested_writes: Vec<Vec<u8>>,

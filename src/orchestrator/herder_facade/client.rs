@@ -1,10 +1,9 @@
-use super::DaemonError;
-use crate::herder_api::StartHerd;
-use crate::ipc_common::write_msg_async;
 use serde::Serialize;
-use tokio::io::AsyncWrite;
-use tokio::process::Child;
+use tokio::{io::AsyncWrite, process::Child};
 use tracing::info;
+
+use super::DaemonError;
+use crate::{herder_api::StartHerd, ipc_common::write_msg_async};
 
 /// A very raw, low-level, write-only interface to the herder daemon.
 /// Literally doesn't even implement responses.
@@ -13,8 +12,8 @@ pub(super) trait HerderClient {
     async fn ensure_escalated_daemon(&mut self) -> Result<(), DaemonError>;
 }
 
-/// A [HerderClient] that doesn't actually spawn the real [HerderClient] until it
-/// gets the first request.
+/// A [HerderClient] that doesn't actually spawn the real [HerderClient] until
+/// it gets the first request.
 pub(super) struct LazyHerderClient<F: HerderClientFactory> {
     factory: F,
     daemon: Option<F::Output>,
@@ -22,8 +21,9 @@ pub(super) struct LazyHerderClient<F: HerderClientFactory> {
 
 /// For constructing [HerderClient]s.
 ///
-/// Unfortunately I can't use an AsyncFnOnce raw because then I'll have so many ugly ugly ugly
-/// explicit type holes and shit to patch in [LazyHerderClient] so this is the less bad option.
+/// Unfortunately I can't use an AsyncFnOnce raw because then I'll have so many
+/// ugly ugly ugly explicit type holes and shit to patch in [LazyHerderClient]
+/// so this is the less bad option.
 pub(super) trait HerderClientFactory {
     type Output: HerderClient;
 
@@ -82,8 +82,8 @@ impl<F: HerderClientFactory> HerderClient for LazyHerderClient<F> {
 ///
 /// If this is dropped, the child process inside is killed, if it manages one.
 pub(super) struct RawHerderClient<W: AsyncWrite + Unpin> {
-    /// We would like to kill the process on drop, if we are the direct parent of the
-    /// process. So, we own a handle to it.
+    /// We would like to kill the process on drop, if we are the direct parent
+    /// of the process. So, we own a handle to it.
     pub(super) _child: Option<Child>,
     pub(super) tx: W,
 }
@@ -109,13 +109,17 @@ impl<W: AsyncWrite + Unpin> HerderClient for RawHerderClient<W> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::ipc_common::read_msg_async;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+
     use assert_matches::assert_matches;
     use serde::{Deserialize, Serialize};
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio::io::duplex;
+
+    use super::*;
+    use crate::ipc_common::read_msg_async;
 
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct MockAction {

@@ -1,26 +1,25 @@
-use super::DaemonError;
-use super::client::LazyHerderClient;
-use super::client::{HerderClient, HerderClientFactory, RawHerderClient};
-use super::{HerdHandle, HerderFacade, StartWriterError};
-use crate::escalation::run_escalate;
-use crate::herder_api::{HerdAction, HerdEvent, TopLevelHerdEvent};
-use crate::ipc_common::read_msg_async;
+use std::{collections::HashMap, hash::Hash, process::Stdio, sync::Arc};
+
 use futures::StreamExt;
-use std::collections::HashMap;
-use std::hash::Hash;
-use std::process::Stdio;
-use std::sync::Arc;
-use tokio::io::BufWriter;
-use tokio::process::ChildStdin;
-use tokio::sync::mpsc;
+use tokio::{io::BufWriter, process::ChildStdin, sync::mpsc};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::{debug, trace};
 use tracing_unwrap::ResultExt;
 
+use super::{
+    DaemonError, HerdHandle, HerderFacade, StartWriterError,
+    client::{HerderClient, HerderClientFactory, LazyHerderClient, RawHerderClient},
+};
+use crate::{
+    escalation::run_escalate,
+    herder_api::{HerdAction, HerdEvent, TopLevelHerdEvent},
+    ipc_common::read_msg_async,
+};
+
 /// Make the actual prod-used [HerderFacade].
 ///
-/// Doing it this way with a function is so that we can hide all of those ugly ugly ugly
-/// type signatures under a nice `impl HerderFacade + 'static`!
+/// Doing it this way with a function is so that we can hide all of those ugly
+/// ugly ugly type signatures under a nice `impl HerderFacade + 'static`!
 pub fn make_herder_facade_impl(log_path: &str) -> impl HerderFacade + 'static {
     let event_demux = Arc::new(std::sync::Mutex::new(EventDemuxMap::new()));
 

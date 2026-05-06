@@ -1,8 +1,8 @@
+use std::{fmt::Display, io::Read};
+
 use base64::Engine;
 use digest::Digest;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
-use std::io::Read;
 
 macro_rules! generate {
     {$(
@@ -353,11 +353,10 @@ pub enum HashParseError {
 #[cfg(test)]
 mod tests {
     use base64::Engine;
-
-    use crate::hash::HashAlg;
+    use test_case::test_case;
 
     use super::{HashParseError, parse_hash_input};
-    use test_case::test_case;
+    use crate::hash::HashAlg;
 
     #[test]
     fn parse_valid_sri_hash() {

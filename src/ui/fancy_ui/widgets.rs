@@ -23,8 +23,8 @@ pub struct SpeedChart<'a> {
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct SpeedChartState {
     /// Due to sample aliasing, the maximum displayed Y value might increase or
-    /// decrease. This keeps track of the maximum Y value ever observed, to prevent
-    /// the chart limits from rapidly changing from the aliasing.
+    /// decrease. This keeps track of the maximum Y value ever observed, to
+    /// prevent the chart limits from rapidly changing from the aliasing.
     max_y_limit: f64,
 }
 
@@ -188,9 +188,10 @@ impl WriterProgressBar {
 
     /// This function clamps the ratio to [0, 1].
     ///
-    /// Unfortunately, it is sometimes outside of [0, 1]. The most common example is when
-    /// we write a non-block-aligned file, in which case bytes_written > max because we
-    /// compensate by writing the partial block.
+    /// Unfortunately, it is sometimes outside of [0, 1]. The most common
+    /// example is when we write a non-block-aligned file, in which case
+    /// bytes_written > max because we compensate by writing the partial
+    /// block.
     pub fn ratio(&self) -> f64 {
         self.ratio.clamp(0.0, 1.0)
     }
@@ -303,9 +304,9 @@ impl QuitModal {
         Self { _private: () }
     }
 
-    /// Handle a key down event. If this would conclude the modal, returns the result.
-    /// Otherwise, if an indecisive keystroke was detected and we are to stay inside the
-    /// modal, returns None.
+    /// Handle a key down event. If this would conclude the modal, returns the
+    /// result. Otherwise, if an indecisive keystroke was detected and we
+    /// are to stay inside the modal, returns None.
     pub fn handle_key_down(self, kc: KeyCode) -> Option<QuitModalResult> {
         use KeyCode::*;
         use QuitModalResult::*;

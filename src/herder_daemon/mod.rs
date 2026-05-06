@@ -1,8 +1,9 @@
-//! This module contains the herder daemon process, along with all of the utilities it uses to
-//! herd and monitor groups of threads.
+//! This module contains the herder daemon process, along with all of the
+//! utilities it uses to herd and monitor groups of threads.
 
-// Side note: Interestingly, this interface can theoretically be used to have caligula delegate
-// writing to remote hosts over SSH. This may be a very strange but funny feature to implement.
+// Side note: Interestingly, this interface can theoretically be used to have
+// caligula delegate writing to remote hosts over SSH. This may be a very
+// strange but funny feature to implement.
 
 use tracing::info;
 use tracing_unwrap::ResultExt;

@@ -1,12 +1,12 @@
 mod zstd_streaming_decoder;
 
-use clap::ValueEnum;
 use std::{
     fmt::Display,
     io::{BufRead, Read},
     path::Path,
 };
 
+use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
 macro_rules! generate {

@@ -3,9 +3,8 @@
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use tracing::info;
 
-use crate::orchestrator::{WriteVerifyParams, WriterState};
-
 use super::widgets::{QuitModal, QuitModalResult, SpeedChartState};
+use crate::orchestrator::{WriteVerifyParams, WriterState};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum UIEvent {

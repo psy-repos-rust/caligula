@@ -1,18 +1,24 @@
 //! The "simple UI". This is module holds subroutines that don't use ratatui,
 //! and don't take up the entire terminal screen.
 //!
-//! As pretty as ratatui looks, sometimes you can't use a full-featured terminal.
-//! This is what this module is for.
+//! As pretty as ratatui looks, sometimes you can't use a full-featured
+//! terminal. This is what this module is for.
 
-use self::ask_hash::ask_hash;
-use self::ask_outfile::ask_compression;
-use self::ask_outfile::ask_outfile;
-use self::ask_outfile::confirm_write;
+use std::{sync::Arc, time::Duration};
+
+use indicatif::{ProgressBar, ProgressStyle};
+use inquire::Confirm;
+use tracing::debug;
+
+use self::{
+    ask_hash::ask_hash,
+    ask_outfile::{ask_compression, ask_outfile, confirm_write},
+};
 use super::cli::BurnArgs;
-use crate::logging::LogPaths;
 use crate::{
     device::WriteTarget,
     herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent},
+    logging::LogPaths,
     orchestrator::{
         Orchestrator, OrchestratorExt, StartWriterError, WriteVerifyParams, WriteVerifyStarted,
         WriterState, watch::Watch,
@@ -20,12 +26,6 @@ use crate::{
     runtime::RemoteSpawn,
     ui::cli::UseSudo,
 };
-use indicatif::ProgressBar;
-use indicatif::ProgressStyle;
-use inquire::Confirm;
-use std::sync::Arc;
-use std::time::Duration;
-use tracing::debug;
 
 mod ask_hash;
 mod ask_outfile;
@@ -33,10 +33,11 @@ mod ask_outfile;
 /// How often we refresh the display
 const REFRESH_PERIOD: Duration = Duration::from_millis(250);
 
-/// Run the simple UI setup wizard, a cruel being that interrogates the user until it is
-/// satisfied with its answers.
+/// Run the simple UI setup wizard, a cruel being that interrogates the user
+/// until it is satisfied with its answers.
 ///
-/// Returns the [BeginParams] if the user confirms, and None if the user doesn't.
+/// Returns the [BeginParams] if the user confirms, and None if the user
+/// doesn't.
 #[tracing::instrument(skip_all)]
 pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<WriteVerifyParams>, anyhow::Error> {
     let compression = ask_compression(args)?;
@@ -60,8 +61,8 @@ pub struct Params<'a> {
 
 /// Attempt to start burning the disk with the given params.
 ///
-/// If received permission denied, figures out if it needs to ask the user to sudo
-/// based on what's provided in the `root` argument.
+/// If received permission denied, figures out if it needs to ask the user to
+/// sudo based on what's provided in the `root` argument.
 #[tracing::instrument(skip_all, fields(root, interactive))]
 pub fn try_start_write_or_escalate(
     orc: Arc<impl Orchestrator>,

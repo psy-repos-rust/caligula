@@ -1,8 +1,9 @@
-use super::HerdAction;
-use crate::compression::CompressionFormat;
-use crate::device::Type;
-use serde::{Deserialize, Serialize};
 use std::{fmt::Display, path::PathBuf};
+
+use serde::{Deserialize, Serialize};
+
+use super::HerdAction;
+use crate::{compression::CompressionFormat, device::Type};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WriteVerifyAction {
@@ -41,8 +42,8 @@ pub enum WriteVerifyEvent {
 super::impl_try_from_top_level_herd_event!(Writer => WriteVerifyEvent);
 
 impl super::HerdEvent for WriteVerifyEvent {
-    type StartInfo = WriteVerifyStart;
     type Failure = WriteVerifyError;
+    type StartInfo = WriteVerifyStart;
 
     fn downcast_as_initial_info(self) -> Result<Self::StartInfo, Self> {
         match self {
