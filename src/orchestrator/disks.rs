@@ -4,7 +4,10 @@ use std::{collections::VecDeque, iter, sync::Mutex};
 
 use crate::device::{DeviceParseError, WriteTarget};
 
+/// Handle for viewing the list of disks we've found.
 pub struct DiskList {
+    loading: bool,
+
     /// List of disks we've discovered.
     disks: Vec<WriteTarget>,
 
@@ -13,6 +16,11 @@ pub struct DiskList {
 }
 
 impl DiskList {
+    /// Returns true if we're still loading the initial list of disks.
+    pub fn loading(&self) -> bool {
+        self.loading
+    }
+
     /// List of disks we've discovered.
     pub fn disks(&self) -> &[WriteTarget] {
         &self.disks

@@ -96,7 +96,7 @@ impl<H: HerderFacade + Send + 'static> Orchestrator for OrchestratorImpl<H> {
         )
     }
 
-    async fn watch_disks(&self) -> Watch<DiskList> {
+    fn watch_disks(&self) -> Watch<DiskList> {
         unimplemented!(
             "Until this is implemented, for testing purposes, you may replace this with test values."
         )
