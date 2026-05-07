@@ -5,6 +5,25 @@ use std::{
 
 use crate::compression::{CompressionFormat, DecompressRead, decompress};
 
+/// Like [`ReadExt::read_exact`], but if it can't fill the entire buffer, it
+/// does not error.
+#[inline(always)]
+pub fn try_read_exact(r: &mut impl Read, mut buf: &mut [u8]) -> std::io::Result<usize> {
+    // modified from rust stdlib file src/io/mod.rs
+
+    let orig_len = buf.len();
+    while !buf.is_empty() {
+        match r.read(buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                buf = &mut buf[n..];
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(orig_len - buf.len())
+}
+
 /// Wraps a reader and counts how many bytes we've read in total, without
 /// making any system calls.
 pub struct CountRead<R: Read> {
