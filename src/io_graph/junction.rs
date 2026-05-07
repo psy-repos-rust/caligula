@@ -17,14 +17,19 @@ pub struct JunctionTracker {
     /// this way is because the reader wants to get a consistent snapshot of
     /// the entire state of the operation, but multiple writers can write to
     /// the same thing at once.
-    transfers: RwLock<Queue<(u32, TransferStat)>>,
+    transfers: RwLock<Inner>,
     next_id: AtomicU32,
+}
+
+struct Inner {
+    q: Queue<(u32, TransferStat)>,
+    e: Option<std::io::Error>,
 }
 
 impl JunctionTracker {
     pub fn new() -> Self {
         Self {
-            transfers: RwLock::new(Queue::new()),
+            transfers: RwLock::new(Inner { q: Queue::new() }),
             next_id: 0.into(),
         }
     }

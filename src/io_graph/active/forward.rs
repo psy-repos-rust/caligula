@@ -1,10 +1,8 @@
-use std::{
-    io::{self, Read, Write},
-    sync::Arc,
-};
+use std::io::{self, Read, Write};
 
 use crate::io_graph::{
-    GraphContext, Node, NodeInfo, Worker,
+    Node, NodeInfo, Worker,
+    executor::GraphContext,
     junction::{ReadJunction, WriteJunction},
 };
 
@@ -14,13 +12,17 @@ pub struct ForwardWorker<'a, R: Read, W: Write> {
     buffer: usize,
 }
 
-impl<'a, R: Read + Sync + 'a, W: Write + Sync + 'a> ForwardWorker<'a, R, W> {
-    pub fn new(input: ReadJunction<'a, R>, output: WriteJunction<'a, W>, buffer: usize) -> Self {
-        Self {
+impl<'a, R: Read + Send + 'a, W: Write + Send + 'a> ForwardWorker<'a, R, W> {
+    pub fn new(
+        buffer: usize,
+        input: ReadJunction<'a, R>,
+        output: WriteJunction<'a, W>,
+    ) -> Box<Self> {
+        Box::new(Self {
             input,
             output,
             buffer,
-        }
+        })
     }
 }
 
@@ -36,11 +38,12 @@ impl<'a, R: Read, W: Write> Node<'a> for ForwardWorker<'a, R, W> {
     }
 }
 
-impl<'a, R: Read + Sync + 'a, W: Write + Sync + 'a> Worker<'a> for ForwardWorker<'a, R, W> {
+impl<'a, R: Read + Send + 'a, W: Write + Send + 'a> Worker<'a> for ForwardWorker<'a, R, W> {
     type Output = ();
 
-    fn run(mut self: Box<Self>, context: Arc<GraphContext>) -> io::Result<()> {
+    fn run(mut self: Box<Self>, context: &GraphContext) -> io::Result<()> {
         let mut buf = vec![0u8; self.buffer];
+
         while !context.halt() {
             let count = self.input.read(&mut buf)?;
             if count == 0 {
@@ -49,6 +52,7 @@ impl<'a, R: Read + Sync + 'a, W: Write + Sync + 'a> Worker<'a> for ForwardWorker
 
             self.output.write_all(&buf[..count])?;
         }
+
         Ok(())
     }
 }

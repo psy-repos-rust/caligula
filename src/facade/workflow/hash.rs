@@ -1,8 +1,8 @@
-#![expect(unused, reason = "Stub interface created for later use.")]
-
-use std::{path::PathBuf, time::Instant};
+use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use bytes::Bytes;
+use sha2::Sha256;
+use tokio::sync::{oneshot, watch};
 
 use crate::{
     byteseries::ByteSeries,
@@ -12,6 +12,10 @@ use crate::{
         workflow::{Workflow, WorkflowState},
     },
     hash::HashAlg,
+    io_graph::{
+        BufNode, FileNode, ForwardWorker, GraphContext, HashWorker, JunctionTracker, Node,
+        TransferStat, Worker as _,
+    },
 };
 
 /// Parameters for starting a new hashing operation.
@@ -50,6 +54,14 @@ impl HashingState {
         }
     }
 
+    fn failed(now: Instant, error: std::io::Error) -> Self {
+        Self {
+            read_bytes_history: ByteSeries::new(now),
+            file_size_bytes: 0,
+            result: Some(error),
+        }
+    }
+
     pub fn read_bytes_history(&self) -> &ByteSeries {
         &self.read_bytes_history
     }
@@ -66,4 +78,88 @@ impl WorkflowState for HashingState {
     fn result(&self) -> Option<&Result<Self::Success, Self::Error>> {
         self.result.as_ref()
     }
+}
+
+async fn run(params: HashWorkflow) -> Watch<HashingState> {
+    let state = Arc::new((GraphContext::new(), JunctionTracker::new()));
+
+    let (tx_start, rx_start) = oneshot::channel();
+    let (tx_end, rx_end) = oneshot::channel();
+
+    let thread = std::thread::spawn({
+        let state = state.clone();
+        let params = params.clone();
+        move || {
+            let (ctx, js) = state.as_ref();
+            run_thread(&params, tx_start, tx_end, ctx, js)
+        }
+    });
+
+    let start = match rx_start.await.expect("thread panicked!") {
+        Ok(r) => r,
+        Err(e) => {
+            let (_tx, rx) = watch::channel(HashingState::failed(Instant::now(), e));
+            return Watch { rx };
+        }
+    };
+
+    let (tx, rx) = watch::channel(HashingState::new(Instant::now(), start.size));
+    tokio::task::spawn_local(async move {
+        let (ctx, js) = state.as_ref();
+    });
+
+    Watch { rx }
+}
+
+struct StartData {
+    size: u64,
+    hasher_input_junction: u32,
+}
+
+fn run_thread(
+    wf: &HashWorkflow,
+    tx_start: oneshot::Sender<std::io::Result<StartData>>,
+    tx_end: oneshot::Sender<std::io::Result<Bytes>>,
+    ctx: &GraphContext,
+    js: &JunctionTracker,
+) {
+    std::thread::scope(move |s| {
+        let setup = (|| {
+            let file = FileNode::new(wf.file.clone(), js.create())?;
+            let buf = BufNode::new(65536, js.create(), js.create());
+            let file_info = file.info();
+            let _buf_info = buf.info();
+
+            let start_data = StartData {
+                size: file_info.extra.1,
+                hasher_input_junction: buf.output.junction().id(),
+            };
+
+            let read = ForwardWorker::new(4096, file.output, buf.input);
+            let hash = HashWorker::<Sha256, _>::new(4096, buf.output);
+
+            Ok::<_, std::io::Error>((start_data, read, hash))
+        })();
+
+        let (read, hash) = match setup {
+            Ok((start_data, read, hash)) => {
+                let Ok(()) = tx_start.send(Ok(start_data)) else {
+                    return;
+                };
+                (read, hash)
+            }
+            Err(err) => {
+                tx_start.send(Err(err)).ok();
+                return;
+            }
+        };
+
+        let r = s.spawn(move || read.run(ctx));
+        let h = s.spawn(move || hash.run(ctx));
+
+        let r = r.join().unwrap();
+        let h = h.join().unwrap();
+
+        tx_end.send(r.and(h)).ok();
+    })
 }

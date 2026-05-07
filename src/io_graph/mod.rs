@@ -1,13 +1,14 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
-
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::io_graph::junction::Junction;
+pub use crate::io_graph::{
+    active::{forward::ForwardWorker, hash::HashWorker},
+    executor::GraphContext,
+    junction::{Junction, JunctionTracker, TransferStat},
+    passive::{buf::BufNode, file::FileNode},
+};
 
 mod active;
+mod executor;
 mod junction;
 mod passive;
 
@@ -23,11 +24,11 @@ pub trait Node<'a> {
 
 /// A [`Node`] representing an active worker thread.
 #[must_use]
-pub trait Worker<'a>: Node<'a> + Sync + 'a {
+pub trait Worker<'a>: Node<'a> + Send + 'a {
     /// Final, successful value computed by this [`Worker`].
     type Output: Send + 'static;
 
-    fn run(self: Box<Self>, context: Arc<GraphContext>) -> std::io::Result<Self::Output>;
+    fn run(self: Box<Self>, context: &GraphContext) -> std::io::Result<Self::Output>;
 }
 
 /// Information associated with a [`Node`]
@@ -37,16 +38,9 @@ pub struct NodeInfo<'a, T> {
     pub outputs: Vec<Junction<'a>>,
 }
 
-pub struct GraphContext {
-    halt: AtomicBool,
-}
-
-impl GraphContext {
-    pub fn new() -> Self {
-        Self { halt: false.into() }
-    }
-
-    pub fn halt(&self) -> bool {
-        self.halt.load(Ordering::Relaxed)
-    }
+/// Information associated with a [`Node`]
+pub struct NodeData<T> {
+    pub extra: T,
+    pub inputs: Vec<u32>,
+    pub outputs: Vec<u32>,
 }

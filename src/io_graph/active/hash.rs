@@ -1,31 +1,30 @@
 use std::{
     io::{self, Read},
     marker::PhantomData,
-    sync::Arc,
 };
 
 use bytes::Bytes;
 use digest::Digest;
 
-use crate::io_graph::{GraphContext, Node, NodeInfo, Worker, junction::ReadJunction};
+use crate::io_graph::{Node, NodeInfo, Worker, executor::GraphContext, junction::ReadJunction};
 
-pub struct HashWorker<'a, R: Read, H: Digest> {
+pub struct HashWorker<'a, H: Digest, R: Read> {
     input: ReadJunction<'a, R>,
     buffer: usize,
     _phantom: PhantomData<fn() -> H>,
 }
 
-impl<'a, R: Read + Sync + 'a, H: Digest> HashWorker<'a, R, H> {
-    pub fn new(input: ReadJunction<'a, R>, buffer: usize) -> Self {
-        Self {
+impl<'a, H: Digest, R: Read + Send + 'a> HashWorker<'a, H, R> {
+    pub fn new(buffer: usize, input: ReadJunction<'a, R>) -> Box<Self> {
+        Box::new(Self {
             input,
             buffer,
             _phantom: PhantomData,
-        }
+        })
     }
 }
 
-impl<'a, R: Read, H: Digest> Node<'a> for HashWorker<'a, R, H> {
+impl<'a, H: Digest, R: Read> Node<'a> for HashWorker<'a, H, R> {
     type Info = usize;
 
     fn info(&self) -> NodeInfo<'a, Self::Info> {
@@ -37,12 +36,12 @@ impl<'a, R: Read, H: Digest> Node<'a> for HashWorker<'a, R, H> {
     }
 }
 
-impl<'a, R: Read + Sync + 'a, H: Digest + 'a> Worker<'a> for HashWorker<'a, R, H> {
+impl<'a, H: Digest + 'a, R: Read + Send + 'a> Worker<'a> for HashWorker<'a, H, R> {
     type Output = Bytes;
 
-    fn run(mut self: Box<Self>, context: Arc<GraphContext>) -> io::Result<Bytes> {
+    fn run(mut self: Box<Self>, context: &GraphContext) -> io::Result<Bytes> {
         let mut h = H::new();
-        let mut buf = vec![0u8; 4096];
+        let mut buf = vec![0u8; self.buffer];
         while !context.halt() {
             let count = self.input.read(&mut buf)?;
 

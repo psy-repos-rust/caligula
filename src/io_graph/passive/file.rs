@@ -7,24 +7,28 @@ use crate::io_graph::{
 
 pub struct FileNode<'a> {
     path: PathBuf,
+    size: u64,
     pub output: ReadJunction<'a, BufReader<File>>,
 }
 
 impl<'a> FileNode<'a> {
     pub fn new(path: PathBuf, junction: Junction<'a>) -> std::io::Result<Self> {
+        let f = File::open(&path)?;
+        let size = f.metadata()?.len();
         Ok(Self {
-            output: ReadJunction::new(BufReader::new(File::open(&path)?), junction),
+            output: ReadJunction::new(BufReader::new(f), junction),
+            size,
             path,
         })
     }
 }
 
 impl<'a> Node<'a> for FileNode<'a> {
-    type Info = PathBuf;
+    type Info = (PathBuf, u64);
 
     fn info(&self) -> NodeInfo<'a, Self::Info> {
         NodeInfo {
-            extra: self.path.clone(),
+            extra: (self.path.clone(), self.size),
             inputs: vec![],
             outputs: vec![self.output.junction().clone()],
         }
