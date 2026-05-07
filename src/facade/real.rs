@@ -2,17 +2,16 @@ use std::{path::PathBuf, time::Instant};
 
 use futures::StreamExt;
 
-use super::legacy_facade::{DaemonError, LegacyFacade, StartWriterError};
+use super::legacy_facade::{DaemonError, LegacyFacade};
 use crate::{
     escalation::EscalationMethod,
     facade::{
-        Analyzer,DiskList, DiskWatcher, Escalator, Orchestrator, WriteVerifyParams,
-        WriteVerifyStarted, WriterVerifyState,
+        Analyzer, DiskList, DiskWatcher, Escalator, Orchestrator, WriteVerifyParams,
+        WriterVerifyState,
         analyze_input::InputAnalysis,
-        hash::{HashStarted, StartHashParams},
         watch::Watch,
+        workflow::hash::{HashingState, StartHashParams},
     },
-    herder_api::write_verify::WriteVerifyEvent,
 };
 
 /// Actual CaligulaFacade implementation used by Caligula.
@@ -39,23 +38,19 @@ impl<H> FacadeImpl<H> {
     }
 }
 
-impl<H: LegacyFacade + Send + 'static> Orchestrator for FacadeImpl<H> {
-    async fn start_hash(&self, _params: StartHashParams) -> std::io::Result<HashStarted> {
-        unimplemented!(
-            "Until this is implemented, for testing purposes, you may replace this with test values."
-        )
-    }
-
-    async fn start_write_verify(
-        &self,
-        params: WriteVerifyParams,
-    ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
+impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyParams> for FacadeImpl<H> {
+    async fn start_workflow(&self, params: WriteVerifyParams) -> Watch<WriterVerifyState> {
         tracing::info!("Requesting herder to start");
 
         // request the herder to start the action
         let mut inner = self.inner.lock().await;
         let esc = inner.escalation.is_some();
-        let handle = inner.h.start_herd(params.make_child_config(), esc).await?;
+        let Ok(handle) = inner.h.start_herd(params.make_child_config(), esc).await else {
+            todo!()
+            /*return Watch {
+                rx: tokio::sync::watch::channel(WriterVerifyState::error(todo!())).1,
+            };*/
+        };
         drop(inner);
 
         // create state reduction task
@@ -73,12 +68,15 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator for FacadeImpl<H> {
                 });
             }
         });
-        let state = super::watch::Watch { rx: rx_state };
+        super::watch::Watch { rx: rx_state }
+    }
+}
 
-        Ok(WriteVerifyStarted {
-            start: handle.initial_info,
-            state,
-        })
+impl<H: LegacyFacade + Send + 'static> Orchestrator<StartHashParams> for FacadeImpl<H> {
+    async fn start_workflow(&self, _workflow: StartHashParams) -> Watch<HashingState> {
+        unimplemented!(
+            "Until this is implemented, for testing purposes, you may replace this with test values."
+        )
     }
 }
 

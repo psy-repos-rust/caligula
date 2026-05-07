@@ -19,8 +19,8 @@ use super::cli::BurnArgs;
 use crate::{
     device::WriteTarget,
     facade::{
-        CaligulaFacade, StartWriterError, WriteVerifyParams, WriteVerifyStarted, WriterVerifyState,
-        watch::Watch,
+        CaligulaFacade, StartWriterError, WriteVerifyParams, WriterVerifyState, watch::Watch,
+        workflow::WorkflowState,
     },
     herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent},
     logging::LogPaths,
@@ -72,20 +72,20 @@ pub fn try_start_write_or_escalate(
     args: &WriteVerifyParams,
     root: UseSudo,
     interactive: bool,
-) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
+) -> Result<Watch<WriterVerifyState>, StartWriterError<WriteVerifyEvent>> {
     tracing::info!("Starting burn without escalation");
 
-    let err = match facade
+    let h = facade
         .clone()
-        .start_write_verify_blocking(runtime, args.clone())
-    {
-        Ok(p) => {
-            return Ok(p);
+        .start_write_verify_blocking(runtime, args.clone());
+    let err = match h.borrow().result() {
+        Some(Err(e)) => e,
+        _ => {
+            return Ok(h);
         }
-        Err(e) => e,
     };
 
-    if let StartWriterError::Failed(WriteVerifyError::PermissionDenied) = &err {
+    if let StartWriterError::Failed(WriteVerifyError::PermissionDenied) = err.as_ref() {
         tracing::info!("Unescalated burn failed");
         match (root, interactive) {
             (UseSudo::Ask, true) => {

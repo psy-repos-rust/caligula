@@ -7,12 +7,13 @@ pub use self::{
     disks::DiskList,
     legacy_facade::{DaemonError, StartWriterError},
     workflow::{
-        hash::{HashStarted, StartHashParams},
-        write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterVerifyState},
+        Orchestrator,
+        write_verify::{WriteVerifyParams, WriterVerifyState},
     },
 };
 use crate::{
-    escalation::EscalationMethod, facade::analyze_input::InputAnalysis, herder_api::write_verify::*,
+    escalation::EscalationMethod,
+    facade::{analyze_input::InputAnalysis, workflow::hash::StartHashParams},
 };
 
 mod analyze_input;
@@ -42,31 +43,27 @@ pub mod workflow;
 /// error types, but in general, the overall shape of this API can be used for
 /// new UI developments.
 pub trait CaligulaFacade:
-    Sync + Send + DiskWatcher + Analyzer + Escalator + Orchestrator + 'static
+    Sync
+    + Send
+    + DiskWatcher
+    + Analyzer
+    + Escalator
+    + Orchestrator<WriteVerifyParams>
+    + Orchestrator<StartHashParams>
+    + 'static
 {
 }
 
 impl<F> CaligulaFacade for F where
-    F: Sync + Send + DiskWatcher + Analyzer + Escalator + Orchestrator + 'static
+    F: Sync
+        + Send
+        + DiskWatcher
+        + Analyzer
+        + Escalator
+        + Orchestrator<WriteVerifyParams>
+        + Orchestrator<StartHashParams>
+        + 'static
 {
-}
-
-pub trait Orchestrator {
-    /// Read a file and calculate its hash in a background thread.
-    ///
-    /// Returns when the file is opened and the thread is running, with a handle
-    /// to watch its progress, or an error if the file could not be opened.
-    #[expect(unused, reason = "Stub interface created for later use.")]
-    async fn start_hash(&self, params: StartHashParams) -> std::io::Result<HashStarted>;
-
-    /// Start a write + verify workflow in the background.
-    ///
-    /// Returns when we get an initial success message from the task group, or
-    /// there was a failure.
-    async fn start_write_verify(
-        &self,
-        params: WriteVerifyParams,
-    ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>>;
 }
 
 pub trait DiskWatcher {

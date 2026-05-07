@@ -2,10 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     escalation::EscalationMethod,
-    facade::{
-        CaligulaFacade, DaemonError, StartWriterError, WriteVerifyParams, WriteVerifyStarted,
-    },
-    herder_api::write_verify::WriteVerifyEvent,
+    facade::{CaligulaFacade, DaemonError, WriteVerifyParams, WriterVerifyState, watch::Watch},
     runtime::RemoteSpawn,
 };
 
@@ -20,9 +17,9 @@ pub trait FacadeExt: CaligulaFacade {
         self: Arc<Self>,
         spawn: impl RemoteSpawn,
         params: WriteVerifyParams,
-    ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
+    ) -> Watch<WriterVerifyState> {
         spawn
-            .spawn(move || async move { self.start_write_verify(params).await })
+            .spawn(move || async move { self.start_workflow(params).await })
             .blocking_recv()
             .expect("remote task dropped!")
     }

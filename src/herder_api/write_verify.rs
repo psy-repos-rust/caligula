@@ -1,4 +1,4 @@
-use std::{fmt::Display, path::PathBuf};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -65,14 +65,21 @@ pub struct WriteVerifyStart {
     pub input_file_bytes: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
 pub enum WriteVerifyError {
+    #[error("Unexpected end of output file. Is your output file too small?")]
     EndOfOutput,
+    #[error("Permission denied while opening file")]
     PermissionDenied,
+    #[error("Disk verification failed!")]
     VerificationFailed,
+    #[error("The child process unexpectedly terminated!")]
     UnexpectedTermination,
+    #[error("Unknown error occurred in child process: {0}")]
     UnknownChildProcError(String),
+    #[error("Failed to unmount disk (exit code {exit_code})\n{message}")]
     FailedToUnmount { message: String, exit_code: i32 },
+    #[error("Orchestrator panicked!")]
     Panicked,
 }
 
@@ -81,30 +88,6 @@ impl From<std::io::Error> for WriteVerifyError {
         match value.kind() {
             std::io::ErrorKind::PermissionDenied => Self::PermissionDenied,
             _ => Self::UnknownChildProcError(format!("{value:#}")),
-        }
-    }
-}
-
-impl Display for WriteVerifyError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            WriteVerifyError::EndOfOutput => write!(
-                f,
-                "Unexpected end of output file. Is your output file too small?"
-            ),
-            WriteVerifyError::PermissionDenied => write!(f, "Permission denied while opening file"),
-            WriteVerifyError::VerificationFailed => write!(f, "Disk verification failed!"),
-            WriteVerifyError::UnexpectedTermination => {
-                write!(f, "The child process unexpectedly terminated!")
-            }
-            WriteVerifyError::UnknownChildProcError(err) => {
-                write!(f, "Unknown error occurred in child process: {err}")
-            }
-            WriteVerifyError::FailedToUnmount { message, exit_code } => write!(
-                f,
-                "Failed to unmount disk (exit code {exit_code})\n{message}"
-            ),
-            WriteVerifyError::Panicked => write!(f, "CaligulaFacade panicked!"),
         }
     }
 }

@@ -38,7 +38,7 @@ pub fn main(
         return Ok(());
     };
 
-    let started = simple_ui::try_start_write_or_escalate(
+    let child_state = simple_ui::try_start_write_or_escalate(
         facade.clone(),
         &runtime,
         &start_write_verify,
@@ -55,14 +55,14 @@ pub fn main(
             fancy_ui::Params {
                 terminal,
                 begin: &start_write_verify,
-                child_state: started.state,
+                child_state,
                 terminal_events: crossterm::event::EventStream::new(),
                 log_paths: &log_paths,
             },
         );
     } else {
         simple_ui::run(simple_ui::Params {
-            child_state: started.state,
+            child_state,
             log_paths: &log_paths,
         });
     }

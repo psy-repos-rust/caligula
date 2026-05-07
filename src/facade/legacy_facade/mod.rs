@@ -1,7 +1,7 @@
 //! WARNING: HERE THERE BE DRAGONS
 //!
-//! The good parts of this submodule will get assimilated into CaligulaFacade once
-//! I get back to working on the stdiomux branch. Don't rely on this module
+//! The good parts of this submodule will get assimilated into CaligulaFacade
+//! once I get back to working on the stdiomux branch. Don't rely on this module
 //! whatsoever! CaligulaFacade is mildly stable though.
 
 mod client;

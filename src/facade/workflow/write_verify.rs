@@ -1,13 +1,13 @@
-use std::{fs::File, path::PathBuf, time::Instant};
+use std::{fs::File, path::PathBuf, sync::Arc, time::Instant};
 
 use bytesize::ByteSize;
 use tracing::{info, trace};
 
-use super::watch::Watch;
 use crate::{
     byteseries::{ByteSeries, EstimatedTime},
     compression::CompressionFormat,
     device::WriteTarget,
+    facade::workflow::WorkflowState,
     herder_api::write_verify::*,
 };
 
@@ -20,12 +20,8 @@ pub struct WriteVerifyParams {
     pub target: WriteTarget,
 }
 
-/// Result of starting a write + verify workflow.
-#[derive(Debug, Clone)]
-pub struct WriteVerifyStarted {
-    #[expect(dead_code)]
-    pub start: WriteVerifyStart,
-    pub state: Watch<WriterVerifyState>,
+impl super::Workflow for WriteVerifyParams {
+    type State = WriterVerifyState;
 }
 
 impl WriteVerifyParams {
@@ -67,17 +63,38 @@ pub enum WriterVerifyState {
     },
     Finished {
         finish_time: Instant,
-        result: Result<(), WriteVerifyError>,
+        result: Result<(), Arc<WriteVerifyError>>,
         write_hist: ByteSeries,
         verify_hist: Option<ByteSeries>,
         total_write_bytes: u64,
     },
 }
 
+impl WorkflowState for WriterVerifyState {
+    type Error = Arc<WriteVerifyError>;
+    type Success = ();
+
+    fn result(&self) -> Option<&Result<Self::Success, Self::Error>> {
+        match self {
+            WriterVerifyState::Finished { result, .. } => Some(result),
+            _ => None,
+        }
+    }
+}
+
 impl WriterVerifyState {
-    #[tracing::instrument]
     pub fn initial(now: Instant, is_input_compressed: bool, input_file_bytes: u64) -> Self {
         WriterVerifyState::Writing(Writing::new(now, is_input_compressed, input_file_bytes))
+    }
+
+    pub fn error(now: Instant, error: Arc<WriteVerifyError>) -> Self {
+        WriterVerifyState::Finished {
+            finish_time: now,
+            result: Err(error),
+            write_hist: ByteSeries::new(now),
+            verify_hist: None,
+            total_write_bytes: 0,
+        }
     }
 
     #[tracing::instrument(skip_all, fields(msg), level = "debug")]
@@ -147,7 +164,7 @@ impl WriterVerifyState {
                 let total_write_bytes = st.write_hist.bytes_encountered();
                 WriterVerifyState::Finished {
                     finish_time: now,
-                    result: error,
+                    result: error.map_err(Arc::new),
                     write_hist: st.write_hist,
                     verify_hist: None,
                     total_write_bytes,
@@ -161,7 +178,7 @@ impl WriterVerifyState {
                 let total_write_bytes = write_hist.bytes_encountered();
                 WriterVerifyState::Finished {
                     finish_time: now,
-                    result: error,
+                    result: error.map_err(Arc::new),
                     write_hist,
                     verify_hist: Some(verify_hist),
                     total_write_bytes,
@@ -182,7 +199,7 @@ impl Default for WriterVerifyState {
         let now = Instant::now();
         Self::Finished {
             finish_time: now,
-            result: Err(WriteVerifyError::Panicked),
+            result: Err(Arc::new(WriteVerifyError::Panicked)),
             write_hist: ByteSeries::new(now),
             verify_hist: None,
             total_write_bytes: 0,
@@ -333,7 +350,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(finish_time - t0, Duration::from_secs(2));
-                assert_eq!(error, Err(WriteVerifyError::UnexpectedTermination));
+                assert_eq!(error, Err(WriteVerifyError::UnexpectedTermination.into()));
             }
             s => panic!("Unexpected {s:#?}"),
         }

@@ -5,7 +5,13 @@ use std::{path::PathBuf, time::Instant};
 use bytes::Bytes;
 
 use crate::{
-    byteseries::ByteSeries, compression::CompressionFormat, facade::watch::Watch, hash::HashAlg,
+    byteseries::ByteSeries,
+    compression::CompressionFormat,
+    facade::{
+        watch::Watch,
+        workflow::{Workflow, WorkflowState},
+    },
+    hash::HashAlg,
 };
 
 /// Parameters for starting a new hashing operation.
@@ -19,6 +25,10 @@ pub struct StartHashParams {
 
     /// How to decompress the file before performing hash (if at all).
     pub compression: CompressionFormat,
+}
+
+impl Workflow for StartHashParams {
+    type State = HashingState;
 }
 
 /// Result from hash starting.
@@ -58,8 +68,13 @@ impl HashingState {
     pub fn file_size_bytes(&self) -> u64 {
         self.file_size_bytes
     }
+}
 
-    pub fn result(&self) -> Option<&std::io::Result<Bytes>> {
+impl WorkflowState for HashingState {
+    type Error = std::io::Error;
+    type Success = Bytes;
+
+    fn result(&self) -> Option<&Result<Self::Success, Self::Error>> {
         self.result.as_ref()
     }
 }
