@@ -5,9 +5,11 @@ use std::path::PathBuf;
 
 pub use self::{
     disks::DiskList,
-    hash::{HashStarted, StartHashParams},
     legacy_facade::{DaemonError, StartWriterError},
-    write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterVerifyState},
+    workflow::{
+        hash::{HashStarted, StartHashParams},
+        write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterVerifyState},
+    },
 };
 use crate::{
     escalation::EscalationMethod, facade::analyze_input::InputAnalysis, herder_api::write_verify::*,
@@ -15,11 +17,10 @@ use crate::{
 
 mod analyze_input;
 mod disks;
-mod hash;
 mod legacy_facade;
 mod real;
 pub mod watch;
-mod write_verify;
+pub mod workflow;
 
 /// Main facade for UI implementations to interact with the rest of the
 /// program's logic.
