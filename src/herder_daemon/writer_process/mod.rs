@@ -57,7 +57,7 @@ pub fn spawn_writer(
 fn run(
     mut tx: impl FnMut(WriteVerifyEvent),
     args: &WriteVerifyAction,
-) -> Result<(), WriteVerifyError> {
+) -> Result<(), LegacyWriteVerifyError> {
     if cfg!(target_os = "macos") && args.target_type == device::Type::Disk {
         let mut command = Command::new("diskutil");
         command
@@ -81,7 +81,7 @@ fn run(
 
         let exit_code = exit.into_raw();
         if !exit.success() {
-            return Err(WriteVerifyError::FailedToUnmount {
+            return Err(LegacyWriteVerifyError::FailedToUnmount {
                 message: format!("stderr: {stderr}\nstdout: {stdout}"),
                 exit_code,
             });
@@ -195,7 +195,10 @@ struct WriteOp<S: Read, D: Write> {
 impl<S: Read, D: Write> WriteOp<S, D> {
     /// Execute the write operation. Returns total number of bytes written.
     #[inline(always)]
-    fn execute(&mut self, mut tx: impl FnMut(WriteVerifyEvent)) -> Result<u64, WriteVerifyError> {
+    fn execute(
+        &mut self,
+        mut tx: impl FnMut(WriteVerifyEvent),
+    ) -> Result<u64, LegacyWriteVerifyError> {
         let mut file = FileSourceReader::new(self.cf, self.file_read_buf_size, &mut self.file);
         let mut disk = CountWrite::new(&mut self.disk);
         let mut buf = avec_rt![[self.disk_block_size] | 0u8; self.buf_size];
@@ -225,7 +228,7 @@ impl<S: Read, D: Write> WriteOp<S, D> {
                 let written_bytes = disk.write(&buf[..])?;
                 if written_bytes == 0 {
                     checkpoint!();
-                    return Err(WriteVerifyError::EndOfOutput);
+                    return Err(LegacyWriteVerifyError::EndOfOutput);
                 }
             }
             checkpoint!();
@@ -277,7 +280,10 @@ struct VerifyOp<S: Read, D: Read> {
 
 impl<S: Read, D: Read> VerifyOp<S, D> {
     #[inline(always)]
-    fn execute(&mut self, mut tx: impl FnMut(WriteVerifyEvent)) -> Result<(), WriteVerifyError> {
+    fn execute(
+        &mut self,
+        mut tx: impl FnMut(WriteVerifyEvent),
+    ) -> Result<(), LegacyWriteVerifyError> {
         let mut file = FileSourceReader::new(self.cf, self.file_read_buf_size, &mut self.file);
         let mut disk = CountRead::new(&mut self.disk);
 
@@ -305,7 +311,7 @@ impl<S: Read, D: Read> VerifyOp<S, D> {
 
                 if file_buf[..file_read_bytes] != disk_buf[..file_read_bytes] {
                     trace!(file_read_bytes, "verification failed");
-                    return Err(WriteVerifyError::VerificationFailed);
+                    return Err(LegacyWriteVerifyError::VerificationFailed);
                 }
             }
             checkpoint!();

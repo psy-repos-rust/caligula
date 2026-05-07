@@ -13,10 +13,10 @@ use ratatui::{
     },
 };
 
-use crate::orchestrator::WriterVerifyState;
+use crate::facade::WVState;
 
 pub struct SpeedChart<'a> {
-    pub state: &'a WriterVerifyState,
+    pub state: &'a WVState,
     pub final_time: Instant,
 }
 
@@ -133,9 +133,9 @@ pub struct WriterProgressBar {
 }
 
 impl WriterProgressBar {
-    pub fn from_writer(state: &WriterVerifyState) -> WriterProgressBar {
+    pub fn from_writer(state: &WVState) -> WriterProgressBar {
         match state {
-            WriterVerifyState::Writing(st) => WriterProgressBar {
+            WVState::Writing(st) => WriterProgressBar {
                 bytes_written: st.write_hist.bytes_encountered(),
                 label_state: "Burning...",
                 style: Style::default().fg(Color::Yellow),
@@ -143,7 +143,7 @@ impl WriterProgressBar {
                 display_total_bytes: st.total_raw_bytes,
             },
 
-            WriterVerifyState::Verifying {
+            WVState::Verifying {
                 verify_hist,
                 total_write_bytes,
                 ..
@@ -154,7 +154,7 @@ impl WriterProgressBar {
                 Style::default().fg(Color::Blue).bg(Color::Yellow),
             ),
 
-            WriterVerifyState::Finished {
+            WVState::Finished {
                 write_hist,
                 result,
                 total_write_bytes,
@@ -224,7 +224,7 @@ impl WriterProgressBar {
 pub struct WritingInfoTable<'a> {
     pub input_filename: &'a str,
     pub target_filename: &'a str,
-    pub state: &'a WriterVerifyState,
+    pub state: &'a WVState,
 }
 
 impl WritingInfoTable<'_> {
@@ -241,13 +241,13 @@ impl WritingInfoTable<'_> {
         ];
 
         match &self.state {
-            WriterVerifyState::Writing(st) => {
+            WVState::Writing(st) => {
                 rows.push(Row::new([
                     Cell::from("ETA Write"),
                     Cell::from(format!("{}", st.eta_write())),
                 ]));
             }
-            WriterVerifyState::Verifying {
+            WVState::Verifying {
                 verify_hist: vdata,
                 total_write_bytes,
                 ..
@@ -261,7 +261,7 @@ impl WritingInfoTable<'_> {
                     Cell::from(format!("{}", vdata.estimated_time_left(*total_write_bytes))),
                 ]));
             }
-            WriterVerifyState::Finished {
+            WVState::Finished {
                 verify_hist: vdata, ..
             } => {
                 if let Some(vdata) = vdata {

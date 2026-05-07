@@ -7,7 +7,7 @@ use tracing::{debug, trace};
 use tracing_unwrap::ResultExt;
 
 use super::{
-    DaemonError, HerdHandle, HerderFacade, StartWriterError,
+    DaemonError, HerdHandle, LegacyFacade, StartWriterError,
     client::{HerderClient, HerderClientFactory, LazyHerderClient, RawHerderClient},
 };
 use crate::{
@@ -16,11 +16,11 @@ use crate::{
     ipc_common::read_msg_async,
 };
 
-/// Make the actual prod-used [HerderFacade].
+/// Make the actual prod-used [LegacyFacade].
 ///
 /// Doing it this way with a function is so that we can hide all of those ugly
-/// ugly ugly type signatures under a nice `impl HerderFacade + 'static`!
-pub fn make_herder_facade_impl(log_path: &str) -> impl HerderFacade + 'static {
+/// ugly ugly type signatures under a nice `impl LegacyFacade + 'static`!
+pub fn make_legacy_facade_impl(log_path: &str) -> impl LegacyFacade + 'static {
     let event_demux = Arc::new(std::sync::Mutex::new(EventDemuxMap::new()));
 
     /// Simple implementor of [HerderClientFactory].
@@ -61,7 +61,7 @@ pub fn make_herder_facade_impl(log_path: &str) -> impl HerderFacade + 'static {
     }
 }
 
-/// Implementation of the actual [HerderFacade] used by Caligula.
+/// Implementation of the actual [LegacyFacade] used by Caligula.
 struct HerderFacadeImpl<Std, Esc> {
     event_demux: Arc<std::sync::Mutex<EventDemuxMap<u64, TopLevelHerdEvent>>>,
     next_writer_id: u64,
@@ -70,7 +70,7 @@ struct HerderFacadeImpl<Std, Esc> {
     escalated_daemon: Esc,
 }
 
-impl<Std, Esc> HerderFacade for HerderFacadeImpl<Std, Esc>
+impl<Std, Esc> LegacyFacade for HerderFacadeImpl<Std, Esc>
 where
     Std: HerderClient,
     Esc: HerderClient,
