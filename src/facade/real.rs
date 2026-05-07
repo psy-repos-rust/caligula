@@ -2,31 +2,31 @@ use std::{path::PathBuf, time::Instant};
 
 use futures::StreamExt;
 
-use super::herder_facade::{DaemonError, HerderFacade, StartWriterError};
+use super::legacy_facade::{DaemonError, LegacyFacade, StartWriterError};
 use crate::{
     escalation::EscalationMethod,
-    herder_api::write_verify::WriteVerifyEvent,
-    orchestrator::{
-        DiskList, Orchestrator, WriteVerifyParams, WriteVerifyStarted, WriterVerifyState,
+    facade::{
+        CaligulaFacade, DiskList, WriteVerifyParams, WriteVerifyStarted, WriterVerifyState,
         analyze_input::InputAnalysis,
         hash::{HashStarted, StartHashParams},
         watch::Watch,
     },
+    herder_api::write_verify::WriteVerifyEvent,
 };
 
-/// Actual orchestrator implementation used by Caligula.
-pub struct OrchestratorImpl<H> {
+/// Actual CaligulaFacade implementation used by Caligula.
+pub struct FacadeImpl<H> {
     inner: tokio::sync::Mutex<Inner<H>>,
 }
 
 struct Inner<H> {
     // TODO: get rid of the entire herder facade thing altogether. just assimilate the good parts
-    // into orchestrator.
+    // into CaligulaFacade.
     h: H,
     escalation: Option<Option<EscalationMethod>>,
 }
 
-impl<H> OrchestratorImpl<H> {
+impl<H> FacadeImpl<H> {
     pub fn new(h: H) -> Self {
         Self {
             inner: Inner {
@@ -38,7 +38,7 @@ impl<H> OrchestratorImpl<H> {
     }
 }
 
-impl<H: HerderFacade + Send + 'static> Orchestrator for OrchestratorImpl<H> {
+impl<H: LegacyFacade + Send + 'static> CaligulaFacade for FacadeImpl<H> {
     async fn start_write_verify(
         &self,
         params: WriteVerifyParams,

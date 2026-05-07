@@ -13,7 +13,7 @@ use ratatui::{
     },
 };
 
-use crate::orchestrator::WriterVerifyState;
+use crate::facade::WriterVerifyState;
 
 pub struct SpeedChart<'a> {
     pub state: &'a WriterVerifyState,

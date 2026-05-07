@@ -1,4 +1,4 @@
-//! Exposes the [`Orchestrator`], which is a facade that orchestrates all
+//! Exposes the [`CaligulaFacade`], which is a facade that orchestrates all
 //! "high-level" work and tracks the state of worker tasks.
 
 use std::{path::PathBuf, sync::Arc};
@@ -6,18 +6,18 @@ use std::{path::PathBuf, sync::Arc};
 pub use self::{
     disks::DiskList,
     hash::{HashStarted, StartHashParams},
-    herder_facade::{DaemonError, StartWriterError},
+    legacy_facade::{DaemonError, StartWriterError},
     write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterVerifyState},
 };
 use crate::{
-    escalation::EscalationMethod, herder_api::write_verify::*,
-    orchestrator::analyze_input::InputAnalysis, runtime::RemoteSpawn,
+    escalation::EscalationMethod, facade::analyze_input::InputAnalysis,
+    herder_api::write_verify::*, runtime::RemoteSpawn,
 };
 
 mod analyze_input;
 mod disks;
 mod hash;
-mod herder_facade;
+mod legacy_facade;
 mod real;
 pub mod watch;
 mod write_verify;
@@ -35,13 +35,13 @@ mod write_verify;
 ///
 /// Note that the interface is fully asynchronous. For synchronous UI
 /// implementations, you should spawn a worker task as a shim between the
-/// [`Orchestrator`] and your synchronous UI threads, probably using channels
+/// [`CaligulaFacade`] and your synchronous UI threads, probably using channels
 /// and such.
 ///
 /// The API for this can be considered "mostly" stable. I'll be changing out the
 /// error types, but in general, the overall shape of this API can be used for
 /// new UI developments.
-pub trait Orchestrator: Sync + Send + 'static {
+pub trait CaligulaFacade: Sync + Send + 'static {
     /// Analyze an input file to guess how we should handle it.
     ///
     /// Returns the results of the analysis, or an error if the file could not
@@ -98,13 +98,13 @@ pub trait Orchestrator: Sync + Send + 'static {
     fn is_escalated(&self) -> bool;
 }
 
-/// Make the actual prod-used orchestrator implementation.
-pub fn make_orchestrator_impl(log_path: &str) -> impl Orchestrator {
-    self::real::OrchestratorImpl::new(herder_facade::make_herder_facade_impl(log_path))
+/// Make the actual prod-used CaligulaFacade implementation.
+pub fn make_real_facade(log_path: &str) -> impl CaligulaFacade {
+    self::real::FacadeImpl::new(legacy_facade::make_legacy_facade_impl(log_path))
 }
 
-pub trait OrchestratorExt: Orchestrator {
-    /// Like [`Orchestrator::start_write_verify()`], but it blocks your thread
+pub trait FacadeExt: CaligulaFacade {
+    /// Like [`CaligulaFacade::start_write_verify()`], but it blocks your thread
     /// while waiting for it to start.
     ///
     /// THIS SHOULD ABSOLUTELY NOT UNDER ANY CIRCUMSTANCES be used in an async
@@ -121,7 +121,7 @@ pub trait OrchestratorExt: Orchestrator {
             .expect("remote task dropped!")
     }
 
-    /// Like [`Orchestrator::escalate()`], but it blocks your thread while
+    /// Like [`CaligulaFacade::escalate()`], but it blocks your thread while
     /// waiting for it to start.
     ///
     /// THIS SHOULD ABSOLUTELY NOT UNDER ANY CIRCUMSTANCES be used in an async
@@ -139,4 +139,4 @@ pub trait OrchestratorExt: Orchestrator {
     }
 }
 
-impl<O: Orchestrator> OrchestratorExt for O {}
+impl<O: CaligulaFacade> FacadeExt for O {}

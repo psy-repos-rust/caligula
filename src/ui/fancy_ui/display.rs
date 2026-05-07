@@ -10,7 +10,7 @@ use super::{
     state::State,
     widgets::{SpeedChart, WriterProgressBar, WritingInfoTable},
 };
-use crate::{logging::LogPaths, orchestrator::WriterVerifyState};
+use crate::{facade::WriterVerifyState, logging::LogPaths};
 
 struct ComputedLayout {
     progress: Rect,

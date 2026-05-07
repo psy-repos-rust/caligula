@@ -17,12 +17,12 @@ use self::{
 use super::cli::BurnArgs;
 use crate::{
     device::WriteTarget,
-    herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent},
-    logging::LogPaths,
-    orchestrator::{
-        Orchestrator, OrchestratorExt, StartWriterError, WriteVerifyParams, WriteVerifyStarted,
+    facade::{
+        CaligulaFacade, FacadeExt, StartWriterError, WriteVerifyParams, WriteVerifyStarted,
         WriterVerifyState, watch::Watch,
     },
+    herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent},
+    logging::LogPaths,
     runtime::RemoteSpawn,
     ui::cli::UseSudo,
 };
@@ -65,7 +65,7 @@ pub struct Params<'a> {
 /// sudo based on what's provided in the `root` argument.
 #[tracing::instrument(skip_all, fields(root, interactive))]
 pub fn try_start_write_or_escalate(
-    orc: Arc<impl Orchestrator>,
+    facade: Arc<impl CaligulaFacade>,
     runtime: &impl RemoteSpawn,
     args: &WriteVerifyParams,
     root: UseSudo,
@@ -73,7 +73,7 @@ pub fn try_start_write_or_escalate(
 ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
     tracing::info!("Starting burn without escalation");
 
-    let err = match orc
+    let err = match facade
         .clone()
         .start_write_verify_blocking(runtime, args.clone())
     {
@@ -101,13 +101,13 @@ pub fn try_start_write_or_escalate(
                 .expect("prompting the user should not fail");
 
                 if response {
-                    orc.clone().escalate_blocking(runtime, None)?;
-                    return orc.start_write_verify_blocking(runtime, args.clone());
+                    facade.clone().escalate_blocking(runtime, None)?;
+                    return facade.start_write_verify_blocking(runtime, args.clone());
                 }
             }
             (UseSudo::Always, _) => {
-                orc.clone().escalate_blocking(runtime, None)?;
-                return orc.start_write_verify_blocking(runtime, args.clone());
+                facade.clone().escalate_blocking(runtime, None)?;
+                return facade.start_write_verify_blocking(runtime, args.clone());
             }
             _ => {}
         }

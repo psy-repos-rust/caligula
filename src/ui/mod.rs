@@ -9,8 +9,8 @@ use tracing::{debug, info};
 
 pub use self::{cli::BurnArgs, utils::ByteSpeed};
 use crate::{
+    facade::CaligulaFacade,
     logging::LogPaths,
-    orchestrator::Orchestrator,
     runtime::RemoteSpawn,
     tty::TermiosRestore,
     ui::{simple_ui::do_setup_wizard, utils::TUICapture},
@@ -19,7 +19,7 @@ use crate::{
 /// Entrypoint for both TUI-based UIs.
 pub fn main(
     runtime: impl RemoteSpawn,
-    orc: Arc<impl Orchestrator>,
+    facade: Arc<impl CaligulaFacade>,
     log_paths: Arc<LogPaths>,
     args: BurnArgs,
 ) -> anyhow::Result<()> {
@@ -39,7 +39,7 @@ pub fn main(
     };
 
     let started = simple_ui::try_start_write_or_escalate(
-        orc.clone(),
+        facade.clone(),
         &runtime,
         &start_write_verify,
         args.root,

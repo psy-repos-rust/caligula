@@ -104,7 +104,7 @@ impl Display for WriteVerifyError {
                 f,
                 "Failed to unmount disk (exit code {exit_code})\n{message}"
             ),
-            WriteVerifyError::Panicked => write!(f, "Orchestrator panicked!"),
+            WriteVerifyError::Panicked => write!(f, "CaligulaFacade panicked!"),
         }
     }
 }

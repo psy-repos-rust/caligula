@@ -3,12 +3,13 @@ use std::sync::Arc;
 use clap::{CommandFactory as _, Parser};
 use tracing::debug;
 
-use crate::orchestrator::make_orchestrator_impl;
+use crate::facade::make_real_facade;
 
 mod byteseries;
 mod compression;
 mod device;
 mod escalation;
+mod facade;
 mod hash;
 mod hashfile;
 mod herder_api;
@@ -16,7 +17,6 @@ mod herder_daemon;
 mod ipc_common;
 mod logging;
 mod native;
-mod orchestrator;
 mod runtime;
 mod tty;
 mod ui;
@@ -62,10 +62,10 @@ fn main() {
             logging::init_logging_parent(&log_paths);
 
             let runtime = crate::runtime::AsyncRuntime::start();
-            let orc = Arc::new(make_orchestrator_impl(log_paths.main()));
+            let facade = Arc::new(make_real_facade(log_paths.main()));
 
             debug!("Starting primary process");
-            match ui::main(runtime, orc, log_paths.into(), burn_args) {
+            match ui::main(runtime, facade, log_paths.into(), burn_args) {
                 Ok(_) => (),
                 Err(e) => handle_toplevel_error(e),
             }

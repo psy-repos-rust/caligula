@@ -1,13 +1,13 @@
 //! WARNING: HERE THERE BE DRAGONS
 //!
-//! The good parts of this submodule will get assimilated into orchestrator once
+//! The good parts of this submodule will get assimilated into CaligulaFacade once
 //! I get back to working on the stdiomux branch. Don't rely on this module
-//! whatsoever! Orchestrator is mildly stable though.
+//! whatsoever! CaligulaFacade is mildly stable though.
 
 mod client;
 mod facade;
 
-pub use facade::make_herder_facade_impl;
+pub use facade::make_legacy_facade_impl;
 use futures::stream::BoxStream;
 
 use crate::herder_api::{HerdAction, HerdEvent, TopLevelHerdEvent};
@@ -20,7 +20,7 @@ use crate::herder_api::{HerdAction, HerdEvent, TopLevelHerdEvent};
 ///
 /// Making it a trait is so that we can easily test the UI as a separate
 /// component from the backend.
-pub trait HerderFacade {
+pub trait LegacyFacade {
     async fn start_herd<A: HerdAction>(
         &mut self,
         action: A,

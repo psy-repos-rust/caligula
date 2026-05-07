@@ -6,7 +6,7 @@ use tracing::debug;
 use crate::{
     compression::{AVAILABLE_FORMATS, CompressionArg, CompressionFormat},
     device::{self, Removable, WriteTarget, enumerate_devices},
-    orchestrator::WriteVerifyParams,
+    facade::WriteVerifyParams,
     ui::cli::BurnArgs,
 };
 

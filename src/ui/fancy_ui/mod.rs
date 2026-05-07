@@ -6,8 +6,8 @@ use tokio::sync::mpsc;
 
 use self::state::UIEvent;
 use crate::{
+    facade::{WriteVerifyParams, WriterVerifyState, watch::Watch},
     logging::LogPaths,
-    orchestrator::{WriteVerifyParams, WriterVerifyState, watch::Watch},
     runtime::RemoteSpawn,
     ui::fancy_ui::{display::draw, state::State},
 };

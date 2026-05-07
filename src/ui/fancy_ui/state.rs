@@ -4,7 +4,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use tracing::info;
 
 use super::widgets::{QuitModal, QuitModalResult, SpeedChartState};
-use crate::orchestrator::{WriteVerifyParams, WriterVerifyState};
+use crate::facade::{WriteVerifyParams, WriterVerifyState};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum UIEvent {

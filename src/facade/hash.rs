@@ -5,8 +5,7 @@ use std::{path::PathBuf, time::Instant};
 use bytes::Bytes;
 
 use crate::{
-    byteseries::ByteSeries, compression::CompressionFormat, hash::HashAlg,
-    orchestrator::watch::Watch,
+    byteseries::ByteSeries, compression::CompressionFormat, facade::watch::Watch, hash::HashAlg,
 };
 
 /// Parameters for starting a new hashing operation.
