@@ -27,13 +27,20 @@ pub struct HashBench {
 }
 
 impl Benchmark for HashBench {
-    fn run(self: Self, _ctx: &BenchContext) {
+    fn run(self: Self, ctx: &BenchContext) {
         do_file_hashing(
             File::open(self.input).unwrap(),
             self.compression,
             self.alg,
-            |_| {},
+            |bs| {
+                ctx.log_bytes_in(bs);
+                ctx.log_progress(bs);
+            },
         )
         .unwrap();
+    }
+
+    fn progress_denominator(&self) -> u64 {
+        std::fs::metadata(&self.input).unwrap().len()
     }
 }

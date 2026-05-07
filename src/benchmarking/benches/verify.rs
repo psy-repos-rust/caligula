@@ -29,4 +29,8 @@ impl Benchmark for VerifyBench {
     fn run(self: Self, _ctx: &BenchContext) {
         todo!()
     }
+
+    fn progress_denominator(&self) -> u64 {
+        std::fs::metadata(&self.input).unwrap().len()
+    }
 }
