@@ -4,7 +4,7 @@ use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use tracing::info;
 
 use super::widgets::{QuitModal, QuitModalResult, SpeedChartState};
-use crate::orchestrator::{WriteVerifyParams, WriterState};
+use crate::orchestrator::{WriteVerifyParams, WriterVerifyState};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum UIEvent {
@@ -34,7 +34,7 @@ impl State {
     ///
     /// Returns [`Self`], or [`None`] to signal completion.
     #[tracing::instrument(skip_all, level = "debug", fields(ev))]
-    pub fn on_event(self, child: &WriterState, ev: UIEvent) -> Option<Self> {
+    pub fn on_event(self, child: &WriterVerifyState, ev: UIEvent) -> Option<Self> {
         match ev {
             UIEvent::SleepTimeout => Some(self),
             UIEvent::RecvTermEvent(e) => self.on_term_event(child, e),
@@ -44,7 +44,7 @@ impl State {
     #[tracing::instrument(skip_all, level = "debug", fields(ev))]
     fn on_term_event(
         self,
-        child: &WriterState,
+        child: &WriterVerifyState,
         ev: Result<Event, (String, std::io::ErrorKind)>,
     ) -> Option<Self> {
         match ev {
@@ -64,7 +64,7 @@ impl State {
 
     fn handle_key_down(
         mut self,
-        child: &WriterState,
+        child: &WriterVerifyState,
         kc: KeyCode,
         km: KeyModifiers,
     ) -> Option<Self> {

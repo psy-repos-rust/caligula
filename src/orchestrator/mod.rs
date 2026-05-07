@@ -1,14 +1,22 @@
 //! Exposes the [`Orchestrator`], which is a facade that orchestrates all
 //! "high-level" work and tracks the state of worker tasks.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 pub use self::{
+    disks::DiskList,
+    hash::{HashStarted, StartHashParams},
     herder_facade::{DaemonError, StartWriterError},
-    write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterState},
+    write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterVerifyState},
 };
-use crate::{escalation::EscalationMethod, herder_api::write_verify::*, runtime::RemoteSpawn};
+use crate::{
+    escalation::EscalationMethod, herder_api::write_verify::*,
+    orchestrator::analyze_input::InputAnalysis, runtime::RemoteSpawn,
+};
 
+mod analyze_input;
+mod disks;
+mod hash;
 mod herder_facade;
 mod real;
 pub mod watch;
@@ -34,13 +42,40 @@ mod write_verify;
 /// error types, but in general, the overall shape of this API can be used for
 /// new UI developments.
 pub trait Orchestrator: Sync + Send + 'static {
-    /// Start a write + verify workflow.
+    /// Analyze an input file to guess how we should handle it.
+    ///
+    /// Returns the results of the analysis, or an error if the file could not
+    /// be read. This method is fault-tolerant, so the only errors that can
+    /// cause this operation to fail are I/O errors.
+    ///
+    /// The intended workflow is that you call it once, to fill up your UI's
+    /// wizard with data, and then ask the user for more information if
+    /// there's anything that's not certain.
+    #[expect(unused, reason = "Stub interface created for later use.")]
+    async fn analyze_input(&self, input: PathBuf) -> std::io::Result<InputAnalysis>;
+
+    /// Get a handle for watching the list of disks available. This may update
+    /// as disks are added and removed to the system.
+    ///
+    /// Although this returns a handle immediately, the initial results may take
+    /// a while to load.
+    #[expect(unused, reason = "Stub interface created for later use.")]
+    fn watch_disks(&self) -> watch::Watch<DiskList>;
+
+    /// Read a file and calculate its hash in a background thread.
+    ///
+    /// Returns when the file is opened and the thread is running, with a handle
+    /// to watch its progress, or an error if the file could not be opened.
+    #[expect(unused, reason = "Stub interface created for later use.")]
+    async fn start_hash(&self, params: StartHashParams) -> std::io::Result<HashStarted>;
+
+    /// Start a write + verify workflow in the background.
     ///
     /// Returns when we get an initial success message from the task group, or
     /// there was a failure.
     async fn start_write_verify(
         &self,
-        begin_params: WriteVerifyParams,
+        params: WriteVerifyParams,
     ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>>;
 
     /// Attempt to spawn a child process as root using the provided escalation
@@ -59,7 +94,7 @@ pub trait Orchestrator: Sync + Send + 'static {
     async fn escalate(&self, method: Option<EscalationMethod>) -> Result<(), DaemonError>;
 
     /// Returns whether or not we have a child process running as root.
-    #[expect(dead_code)]
+    #[expect(unused, reason = "Stub interface created for later use.")]
     fn is_escalated(&self) -> bool;
 }
 
@@ -78,10 +113,10 @@ pub trait OrchestratorExt: Orchestrator {
     fn start_write_verify_blocking(
         self: Arc<Self>,
         spawn: impl RemoteSpawn,
-        begin_params: WriteVerifyParams,
+        params: WriteVerifyParams,
     ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
         spawn
-            .spawn(move || async move { self.start_write_verify(begin_params).await })
+            .spawn(move || async move { self.start_write_verify(params).await })
             .blocking_recv()
             .expect("remote task dropped!")
     }

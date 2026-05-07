@@ -8,6 +8,7 @@ use super::EscalationError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
 pub enum EscalationMethod {
+    // TODO: add a GUI sudo method for Linuxes
     #[display(fmt = "sudo")]
     Sudo,
     #[display(fmt = "doas")]

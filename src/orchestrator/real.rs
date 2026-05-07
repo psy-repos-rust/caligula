@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::{path::PathBuf, time::Instant};
 
 use futures::StreamExt;
 
@@ -6,7 +6,12 @@ use super::herder_facade::{DaemonError, HerderFacade, StartWriterError};
 use crate::{
     escalation::EscalationMethod,
     herder_api::write_verify::WriteVerifyEvent,
-    orchestrator::{Orchestrator, WriteVerifyParams, WriteVerifyStarted, WriterState},
+    orchestrator::{
+        DiskList, Orchestrator, WriteVerifyParams, WriteVerifyStarted, WriterVerifyState,
+        analyze_input::InputAnalysis,
+        hash::{HashStarted, StartHashParams},
+        watch::Watch,
+    },
 };
 
 /// Actual orchestrator implementation used by Caligula.
@@ -47,7 +52,7 @@ impl<H: HerderFacade + Send + 'static> Orchestrator for OrchestratorImpl<H> {
         drop(inner);
 
         // create state reduction task
-        let (tx_state, rx_state) = tokio::sync::watch::channel(WriterState::initial(
+        let (tx_state, rx_state) = tokio::sync::watch::channel(WriterVerifyState::initial(
             Instant::now(),
             !params.compression.is_identity(),
             handle.initial_info.input_file_bytes,
@@ -77,6 +82,29 @@ impl<H: HerderFacade + Send + 'static> Orchestrator for OrchestratorImpl<H> {
     }
 
     fn is_escalated(&self) -> bool {
-        todo!()
+        // TODO: this is badly implemented but it's good enough for writing new UIs
+        // against. It will be improved when we get rid of herder facade.
+        let Ok(lock) = self.inner.try_lock() else {
+            return false;
+        };
+        lock.escalation.is_some()
+    }
+
+    async fn start_hash(&self, _params: StartHashParams) -> std::io::Result<HashStarted> {
+        unimplemented!(
+            "Until this is implemented, for testing purposes, you may replace this with test values."
+        )
+    }
+
+    fn watch_disks(&self) -> Watch<DiskList> {
+        unimplemented!(
+            "Until this is implemented, for testing purposes, you may replace this with test values."
+        )
+    }
+
+    async fn analyze_input(&self, _input: PathBuf) -> std::io::Result<InputAnalysis> {
+        unimplemented!(
+            "Until this is implemented, for testing purposes, you may replace this with test values."
+        )
     }
 }

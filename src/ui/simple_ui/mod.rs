@@ -21,7 +21,7 @@ use crate::{
     logging::LogPaths,
     orchestrator::{
         Orchestrator, OrchestratorExt, StartWriterError, WriteVerifyParams, WriteVerifyStarted,
-        WriterState, watch::Watch,
+        WriterVerifyState, watch::Watch,
     },
     runtime::RemoteSpawn,
     ui::cli::UseSudo,
@@ -55,7 +55,7 @@ pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<WriteVerifyParams>, any
 }
 
 pub struct Params<'a> {
-    pub child_state: Watch<WriterState>,
+    pub child_state: Watch<WriterVerifyState>,
     pub log_paths: &'a LogPaths,
 }
 
@@ -140,10 +140,10 @@ pub fn run<'a>(params: Params<'a>) {
 
         let child_state = params.child_state.borrow();
         match &*child_state {
-            WriterState::Writing(b) => {
+            WriterVerifyState::Writing(b) => {
                 write_progress.set_position((b.approximate_ratio() * (length as f64)) as u64)
             }
-            WriterState::Verifying {
+            WriterVerifyState::Verifying {
                 verify_hist,
                 total_write_bytes,
                 ..
@@ -151,13 +151,13 @@ pub fn run<'a>(params: Params<'a>) {
                 let ratio = verify_hist.bytes_encountered() as f64 / *total_write_bytes as f64;
                 verify_progress.set_position((ratio * (length as f64)) as u64)
             }
-            WriterState::Finished { error, .. } => {
-                match error {
-                    Some(error) => {
+            WriterVerifyState::Finished { result, .. } => {
+                match result {
+                    Err(error) => {
                         println!("Error occurred while writing: {error}");
                         println!("{}", params.log_paths.get_bug_report_msg());
                     }
-                    None => {
+                    Ok(()) => {
                         println!("Done!")
                     }
                 }

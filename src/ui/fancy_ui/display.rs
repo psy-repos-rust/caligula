@@ -10,7 +10,7 @@ use super::{
     state::State,
     widgets::{SpeedChart, WriterProgressBar, WritingInfoTable},
 };
-use crate::{logging::LogPaths, orchestrator::WriterState};
+use crate::{logging::LogPaths, orchestrator::WriterVerifyState};
 
 struct ComputedLayout {
     progress: Rect,
@@ -68,7 +68,7 @@ fn centered_rect(r: Rect, w: u16, h: u16) -> Rect {
 /// Draw the TUI.
 pub fn draw(
     state: &mut State,
-    child: &WriterState,
+    child: &WriterVerifyState,
     terminal: &mut Terminal<impl ratatui::backend::Backend>,
     log_paths: &LogPaths,
 ) -> std::io::Result<()> {
@@ -77,12 +77,12 @@ pub fn draw(
     let progress_bar = WriterProgressBar::from_writer(child);
 
     let final_time = match child {
-        WriterState::Finished { finish_time, .. } => *finish_time,
+        WriterVerifyState::Finished { finish_time, .. } => *finish_time,
         _ => Instant::now(),
     };
 
     let error = match &child {
-        WriterState::Finished { error, .. } => error.as_ref(),
+        WriterVerifyState::Finished { result: error, .. } => error.as_ref().err(),
         _ => None,
     };
 
