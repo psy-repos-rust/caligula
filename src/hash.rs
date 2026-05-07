@@ -20,7 +20,7 @@ macro_rules! generate {
         ///
         /// [`Ord`] is implemented in order by security. Lower-security algorithms are
         /// less than higher-security algorithms.
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+        #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
         pub enum HashAlg {
             $($(
                 $enum_arm,
