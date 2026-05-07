@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{fs::File, path::PathBuf};
 
 use clap::Parser;
 use serde::{Deserialize, Serialize};
@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     benchmarking::{BenchContext, Benchmark},
     compression::CompressionFormat,
+    legacy_io::VerifyOp,
 };
 
 /// Disk verification benchmark.
@@ -13,7 +14,7 @@ use crate::{
 pub struct VerifyBench {
     /// Input file to verify against.
     #[arg(short, long, display_order = 0)]
-    pub input: PathBuf,
+    pub image: PathBuf,
 
     /// Disk to verify.
     #[arg(short = 'o', long, display_order = 1)]
@@ -23,14 +24,38 @@ pub struct VerifyBench {
     /// What compression format the input file is in.
     #[arg(short = 'z', long, default_value = "identity")]
     pub compression: CompressionFormat,
+
+    #[arg(long, default_value = "1048576")]
+    pub file_read_buf_size: usize,
+
+    #[arg(long, default_value = "1048576")]
+    pub disk_read_buf_size: usize,
+
+    #[arg(long, default_value = "4096")]
+    pub disk_block_size: usize,
 }
 
 impl Benchmark for VerifyBench {
-    fn run(self: Self, _ctx: &BenchContext) {
-        todo!()
+    fn run(self: Self, ctx: &BenchContext) {
+        VerifyOp {
+            file: File::open(self.image).expect("failed to open image"),
+            disk: File::open(self.disk).expect("failed to open disk"),
+            cf: self.compression,
+            buf_size: self.disk_read_buf_size,
+            disk_block_size: self.disk_block_size,
+            checkpoint_period: 32,
+            file_read_buf_size: self.file_read_buf_size,
+        }
+        .execute(|e| match e {
+            crate::herder_api::write_verify::WriteVerifyEvent::TotalBytes { src, dest } => {
+                ctx.log_bytes_in(src + dest);
+            }
+            _ => (),
+        })
+        .expect("operation failed");
     }
 
     fn progress_denominator(&self) -> u64 {
-        std::fs::metadata(&self.input).unwrap().len()
+        std::fs::metadata(&self.image).unwrap().len()
     }
 }

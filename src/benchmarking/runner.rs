@@ -75,7 +75,6 @@ impl BenchContext {
         self.bytes_in.store(bytes_in, Ordering::Relaxed);
     }
 
-    #[expect(unused)]
     pub fn log_bytes_out(&self, bytes_out: u64) {
         self.bytes_out.store(bytes_out, Ordering::Relaxed);
     }
