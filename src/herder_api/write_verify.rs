@@ -36,13 +36,13 @@ pub enum WriteVerifyEvent {
         duration_millis: u64,
     },
     Success,
-    Error(WriteVerifyWorkerError),
+    Error(LegacyWriteVerifyError),
 }
 
 super::impl_try_from_top_level_herd_event!(Writer => WriteVerifyEvent);
 
 impl super::HerdEvent for WriteVerifyEvent {
-    type Failure = WriteVerifyWorkerError;
+    type Failure = LegacyWriteVerifyError;
     type StartInfo = WriteVerifyStart;
 
     fn downcast_as_initial_info(self) -> Result<Self::StartInfo, Self> {
@@ -66,7 +66,7 @@ pub struct WriteVerifyStart {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
-pub enum WriteVerifyWorkerError {
+pub enum LegacyWriteVerifyError {
     #[error("Unexpected end of output file. Is your output file too small?")]
     EndOfOutput,
     #[error("Permission denied while opening file")]
@@ -81,7 +81,7 @@ pub enum WriteVerifyWorkerError {
     FailedToUnmount { message: String, exit_code: i32 },
 }
 
-impl From<std::io::Error> for WriteVerifyWorkerError {
+impl From<std::io::Error> for LegacyWriteVerifyError {
     fn from(value: std::io::Error) -> Self {
         match value.kind() {
             std::io::ErrorKind::PermissionDenied => Self::PermissionDenied,

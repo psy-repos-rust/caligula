@@ -13,18 +13,18 @@ use crate::{
 
 /// Params for starting a write + verify workflow.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct WriteVerifyParams {
+pub struct WriteVerifyWorkflow {
     pub input_file: PathBuf,
     pub input_file_size: ByteSize,
     pub compression: CompressionFormat,
     pub target: WriteTarget,
 }
 
-impl super::Workflow for WriteVerifyParams {
-    type State = WriterVerifyState;
+impl super::Workflow for WriteVerifyWorkflow {
+    type State = WVState;
 }
 
-impl WriteVerifyParams {
+impl WriteVerifyWorkflow {
     pub fn new(
         input_file: PathBuf,
         compression: CompressionFormat,
@@ -51,10 +51,9 @@ impl WriteVerifyParams {
     }
 }
 
-/// A state machine for tracking the state of the writer and verifier, based on
-/// received messages.
+/// A state machine for tracking the state of the write + verify workflow.
 #[derive(Debug, Clone, PartialEq)]
-pub enum WriterVerifyState {
+pub enum WVState {
     Writing(Writing),
     Verifying {
         write_hist: ByteSeries,
@@ -77,7 +76,7 @@ pub enum WriteVerifyWorkflowError {
     #[error("Daemon management error: {0}")]
     Daemon(#[from] Arc<DaemonError>),
     #[error("Worker error: {0}")]
-    Worker(#[from] WriteVerifyWorkerError),
+    Worker(#[from] LegacyWriteVerifyError),
     #[error("Orchestrator panicked!")]
     Panicked,
 }
@@ -92,25 +91,25 @@ impl PartialEq for WriteVerifyWorkflowError {
     }
 }
 
-impl WorkflowState for WriterVerifyState {
-    type Success = ();
+impl WorkflowState for WVState {
     type Error = Arc<WriteVerifyWorkflowError>;
+    type Success = ();
 
     fn result(&self) -> Option<&Result<Self::Success, Self::Error>> {
         match self {
-            WriterVerifyState::Finished { result, .. } => Some(result),
+            WVState::Finished { result, .. } => Some(result),
             _ => None,
         }
     }
 }
 
-impl WriterVerifyState {
+impl WVState {
     pub fn initial(now: Instant, is_input_compressed: bool, input_file_bytes: u64) -> Self {
-        WriterVerifyState::Writing(Writing::new(now, is_input_compressed, input_file_bytes))
+        WVState::Writing(Writing::new(now, is_input_compressed, input_file_bytes))
     }
 
     pub fn error(now: Instant, error: WriteVerifyWorkflowError) -> Self {
-        WriterVerifyState::Finished {
+        WVState::Finished {
             finish_time: now,
             result: Err(error.into()),
             write_hist: ByteSeries::new(now),
@@ -130,7 +129,7 @@ impl WriterVerifyState {
             Some(WriteVerifyEvent::FinishedWriting { verifying }) => {
                 info!("Received finished writing notification");
                 match self {
-                    WriterVerifyState::Writing(st) => st.into_finished(now, verifying),
+                    WVState::Writing(st) => st.into_finished(now, verifying),
                     c => c,
                 }
             }
@@ -146,7 +145,7 @@ impl WriterVerifyState {
                 info!("Messages terminated unexpectedly");
                 self.into_finished(
                     now,
-                    Err(WriteVerifyWorkerError::UnexpectedTermination.into()),
+                    Err(LegacyWriteVerifyError::UnexpectedTermination.into()),
                 )
             }
             other => panic!(
@@ -174,24 +173,20 @@ impl WriterVerifyState {
 
     fn on_total_bytes(&mut self, now: Instant, src: u64, dest: u64) {
         match self {
-            WriterVerifyState::Writing(st) => {
+            WVState::Writing(st) => {
                 st.read_hist.push(now, src);
                 st.write_hist.push(now, dest);
             }
-            WriterVerifyState::Verifying { verify_hist, .. } => verify_hist.push(now, dest),
-            WriterVerifyState::Finished { .. } => {}
+            WVState::Verifying { verify_hist, .. } => verify_hist.push(now, dest),
+            WVState::Finished { .. } => {}
         };
     }
 
-    fn into_finished(
-        self,
-        now: Instant,
-        error: Result<(), WriteVerifyWorkflowError>,
-    ) -> WriterVerifyState {
+    fn into_finished(self, now: Instant, error: Result<(), WriteVerifyWorkflowError>) -> WVState {
         match self {
-            WriterVerifyState::Writing(st) => {
+            WVState::Writing(st) => {
                 let total_write_bytes = st.write_hist.bytes_encountered();
-                WriterVerifyState::Finished {
+                WVState::Finished {
                     finish_time: now,
                     result: error.map_err(Arc::new),
                     write_hist: st.write_hist,
@@ -199,13 +194,13 @@ impl WriterVerifyState {
                     total_write_bytes,
                 }
             }
-            WriterVerifyState::Verifying {
+            WVState::Verifying {
                 write_hist,
                 verify_hist,
                 ..
             } => {
                 let total_write_bytes = write_hist.bytes_encountered();
-                WriterVerifyState::Finished {
+                WVState::Finished {
                     finish_time: now,
                     result: error.map_err(Arc::new),
                     write_hist,
@@ -218,11 +213,11 @@ impl WriterVerifyState {
     }
 
     pub fn is_finished(&self) -> bool {
-        matches!(self, WriterVerifyState::Finished { .. })
+        matches!(self, WVState::Finished { .. })
     }
 }
 
-impl Default for WriterVerifyState {
+impl Default for WVState {
     /// Suitable value to put into the cell when [`std::mem::take()`] is called.
     fn default() -> Self {
         let now = Instant::now();
@@ -273,20 +268,20 @@ impl Writing {
         }
     }
 
-    fn into_finished(self, time: Instant, verifying: bool) -> WriterVerifyState {
+    fn into_finished(self, time: Instant, verifying: bool) -> WVState {
         let total_write_bytes = self.write_hist.bytes_encountered();
 
         if verifying {
             info!(verifying, "Transition to verifying");
 
-            WriterVerifyState::Verifying {
+            WVState::Verifying {
                 write_hist: self.write_hist,
                 verify_hist: ByteSeries::new(time),
                 total_write_bytes,
             }
         } else {
             info!(verifying, "Transition to finished");
-            WriterVerifyState::Finished {
+            WVState::Finished {
                 finish_time: time,
                 result: Ok(()),
                 write_hist: self.write_hist,
@@ -304,13 +299,13 @@ mod tests {
         time::{Duration, Instant},
     };
 
-    use super::WriterVerifyState;
+    use super::WVState;
     use crate::{byteseries::ByteSeries, herder_api::write_verify::*};
 
     #[test]
     fn accept_total_bytes_messages() {
         let t0 = Instant::now();
-        let s = WriterVerifyState::initial(t0, false, 80)
+        let s = WVState::initial(t0, false, 80)
             .on_status(
                 t0 + Duration::from_secs(1),
                 Some(WriteVerifyEvent::TotalBytes { src: 20, dest: 10 }),
@@ -325,7 +320,7 @@ mod tests {
             );
 
         let s = match s {
-            WriterVerifyState::Writing(s) => s,
+            WVState::Writing(s) => s,
             s => panic!("unexpected {:#?}", s),
         };
         assert_eq!(s.read_hist.last_datapoint(), (3.0, 60));
@@ -335,13 +330,13 @@ mod tests {
     #[test]
     fn writing_value_for_uncompressed_ratio() {
         let t0 = Instant::now();
-        let s = WriterVerifyState::initial(t0, false, 400).on_status(
+        let s = WVState::initial(t0, false, 400).on_status(
             t0 + Duration::from_secs(1),
             Some(WriteVerifyEvent::TotalBytes { src: 15, dest: 40 }),
         );
 
         let s = match s {
-            WriterVerifyState::Writing(s) => s,
+            WVState::Writing(s) => s,
             s => panic!("unexpected {:#?}", s),
         };
         assert_eq!(s.approximate_ratio(), 0.1);
@@ -350,7 +345,7 @@ mod tests {
     #[test]
     fn writing_value_for_compressed_ratio() {
         let t0 = Instant::now();
-        let s = WriterVerifyState::initial(t0, true, 80).on_status(
+        let s = WVState::initial(t0, true, 80).on_status(
             t0 + Duration::from_secs(1),
             Some(WriteVerifyEvent::TotalBytes {
                 src: 20,
@@ -359,7 +354,7 @@ mod tests {
         );
 
         let s = match s {
-            WriterVerifyState::Writing(s) => s,
+            WVState::Writing(s) => s,
             s => panic!("unexpected {s:#?}"),
         };
         assert_eq!(s.approximate_ratio(), 0.25);
@@ -368,7 +363,7 @@ mod tests {
     #[test]
     fn sudden_terminate_in_writing_state_sets_error() {
         let t0 = Instant::now();
-        let s = WriterVerifyState::initial(t0, true, 80)
+        let s = WVState::initial(t0, true, 80)
             .on_status(
                 t0 + Duration::from_secs(1),
                 Some(WriteVerifyEvent::TotalBytes { src: 20, dest: 20 }),
@@ -376,7 +371,7 @@ mod tests {
             .on_status(t0 + Duration::from_secs(2), None);
 
         match s {
-            WriterVerifyState::Finished {
+            WVState::Finished {
                 finish_time,
                 result: error,
                 ..
@@ -385,7 +380,7 @@ mod tests {
                 assert_eq!(
                     error,
                     Err(Arc::new(
-                        WriteVerifyWorkerError::UnexpectedTermination.into()
+                        LegacyWriteVerifyError::UnexpectedTermination.into()
                     ))
                 );
             }
@@ -397,7 +392,7 @@ mod tests {
     fn terminate_during_finished_is_idempotent() {
         let t0 = Instant::now();
         let finish_time = t0 + Duration::from_secs(10);
-        let s0 = WriterVerifyState::Finished {
+        let s0 = WVState::Finished {
             finish_time,
             result: Ok(()),
             write_hist: ByteSeries::new(t0),
@@ -415,7 +410,7 @@ mod tests {
     fn finished_during_finished_is_idempotent() {
         let t0 = Instant::now();
         let finish_time = t0 + Duration::from_secs(10);
-        let s0 = WriterVerifyState::Finished {
+        let s0 = WVState::Finished {
             finish_time,
             result: Ok(()),
             write_hist: ByteSeries::new(t0),

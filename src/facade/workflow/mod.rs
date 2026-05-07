@@ -5,7 +5,23 @@ use crate::facade::watch::Watch;
 pub mod hash;
 pub mod write_verify;
 
-/// An object that can handle the spawning of a specific workflow.
+/// An abstract interface to the workflow spawning subsystem for a specific
+/// workflow.
+///
+/// [`Workflow`]s represent a long-running, possibly multi-step series of tasks
+/// that users would want to schedule, like write + verify, hash calculation,
+/// and so on. This trait handles everything related to the workflow and exposes
+/// it ti the UI:
+///
+/// - spawning child processes and escalating them
+/// - orchestration of multiple steps
+/// - reduction of event streams from the child processes into full states
+///
+/// Note that although some implementations spawn workers effectively
+/// immediately, the actual interface is asynchronous. For synchronous UI
+/// implementations, you should spawn a worker task as a shim between the
+/// [`Orchestrator`] and your synchronous UI threads, probably using channels
+/// and such to communicate.
 pub trait Orchestrator<W: Workflow> {
     /// Start the workflow in the background.
     ///
@@ -35,8 +51,8 @@ pub trait WorkflowState: Sync + 'static {
 }
 
 pub trait OrchestratorExt<W: Workflow>: Orchestrator<W> {
-    /// Helper method for starting a workflow and checking if it immediately errored
-    /// before continuing.
+    /// Helper method for starting a workflow and checking if it immediately
+    /// errored before continuing.
     async fn start_workflow_checked(
         &self,
         workflow: W,

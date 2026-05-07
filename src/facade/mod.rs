@@ -8,12 +8,12 @@ pub use self::{
     legacy_facade::{DaemonError, StartWriterError},
     workflow::{
         Orchestrator, OrchestratorExt,
-        write_verify::{WriteVerifyParams, WriteVerifyWorkflowError, WriterVerifyState},
+        write_verify::{WVState, WriteVerifyWorkflow, WriteVerifyWorkflowError},
     },
 };
 use crate::{
     escalation::EscalationMethod,
-    facade::{analyze_input::InputAnalysis, workflow::hash::StartHashParams},
+    facade::{analyze_input::FileAnalysis, workflow::hash::HashWorkflow},
 };
 
 mod analyze_input;
@@ -26,18 +26,8 @@ pub mod workflow;
 /// Main facade for UI implementations to interact with the rest of the
 /// program's logic.
 ///
-/// This can be thought of as the glue between the UI and the backend, handling
-/// the following:
-///
-/// - spawning child processes and escalating them
-/// - orchestrating multi-step workflows, such as write + verify
-/// - reduction of event streams from the child processes into full states,
-///   along with [`Watch`] handles for you to query state updates
-///
-/// Note that the interface is fully asynchronous. For synchronous UI
-/// implementations, you should spawn a worker task as a shim between the
-/// [`CaligulaFacade`] and your synchronous UI threads, probably using channels
-/// and such.
+/// This trait is split up into several subtraits, each representing a different
+/// kind of action the UI can take.
 ///
 /// The API for this can be considered "mostly" stable. I'll be changing out the
 /// error types, but in general, the overall shape of this API can be used for
@@ -46,10 +36,10 @@ pub trait CaligulaFacade:
     Sync
     + Send
     + DiskWatcher
-    + Analyzer
+    + FileAnalyzer
     + Escalator
-    + Orchestrator<WriteVerifyParams>
-    + Orchestrator<StartHashParams>
+    + Orchestrator<WriteVerifyWorkflow>
+    + Orchestrator<HashWorkflow>
     + 'static
 {
 }
@@ -58,14 +48,15 @@ impl<F> CaligulaFacade for F where
     F: Sync
         + Send
         + DiskWatcher
-        + Analyzer
+        + FileAnalyzer
         + Escalator
-        + Orchestrator<WriteVerifyParams>
-        + Orchestrator<StartHashParams>
+        + Orchestrator<WriteVerifyWorkflow>
+        + Orchestrator<HashWorkflow>
         + 'static
 {
 }
 
+/// Represents an interface to the disk querying subsystem.
 pub trait DiskWatcher {
     /// Get a handle for watching the list of disks available. This may update
     /// as disks are added and removed to the system.
@@ -76,8 +67,11 @@ pub trait DiskWatcher {
     fn watch_disks(&self) -> watch::Watch<DiskList>;
 }
 
-pub trait Analyzer {
-    /// Analyze an input file to guess how we should handle it.
+/// Represents an interface to the file analysis subsystem.
+pub trait FileAnalyzer {
+    /// Analyze a file to guess how we should handle it.
+    ///
+    /// This is a fairly fast operation, expected to take 1-3 seconds to run.
     ///
     /// Returns the results of the analysis, or an error if the file could not
     /// be read. This method is fault-tolerant, so the only errors that can
@@ -87,9 +81,10 @@ pub trait Analyzer {
     /// wizard with data, and then ask the user for more information if
     /// there's anything that's not certain.
     #[expect(unused, reason = "Stub interface created for later use.")]
-    async fn analyze_input(&self, input: PathBuf) -> std::io::Result<InputAnalysis>;
+    async fn analyze_file(&self, input: PathBuf) -> std::io::Result<FileAnalysis>;
 }
 
+/// Represents an interface to the privilege escalation subsystem.
 pub trait Escalator {
     /// Attempt to spawn a child process as root using the provided escalation
     /// method (or [`None`] to automatically guess which one to use).

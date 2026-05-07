@@ -6,11 +6,10 @@ use super::legacy_facade::{DaemonError, LegacyFacade};
 use crate::{
     escalation::EscalationMethod,
     facade::{
-        Analyzer, DiskList, DiskWatcher, Escalator, Orchestrator, WriteVerifyParams,
-        WriterVerifyState,
-        analyze_input::InputAnalysis,
+        DiskList, DiskWatcher, Escalator, FileAnalyzer, Orchestrator, WVState, WriteVerifyWorkflow,
+        analyze_input::FileAnalysis,
         watch::Watch,
-        workflow::hash::{HashingState, StartHashParams},
+        workflow::hash::{HashWorkflow, HashingState},
     },
 };
 
@@ -38,8 +37,8 @@ impl<H> FacadeImpl<H> {
     }
 }
 
-impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyParams> for FacadeImpl<H> {
-    async fn start_workflow(&self, params: WriteVerifyParams) -> Watch<WriterVerifyState> {
+impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyWorkflow> for FacadeImpl<H> {
+    async fn start_workflow(&self, params: WriteVerifyWorkflow) -> Watch<WVState> {
         tracing::info!("Requesting herder to start");
 
         // request the herder to start the action
@@ -53,7 +52,7 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyParams> for Facad
                 // oh god what a shitshow
                 // TODO: refactor the shit out of this thing
                 return Watch {
-                    rx: tokio::sync::watch::channel(WriterVerifyState::error(
+                    rx: tokio::sync::watch::channel(WVState::error(
                         Instant::now(),
                         match e {
                             crate::facade::StartWriterError::UnexpectedFirstStatus(s) => {
@@ -63,7 +62,9 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyParams> for Facad
                                 crate::facade::WriteVerifyWorkflowError::Worker(f)
                             }
                             crate::facade::StartWriterError::DaemonError(daemon_error) => {
-                                crate::facade::WriteVerifyWorkflowError::Daemon(Arc::new(daemon_error))
+                                crate::facade::WriteVerifyWorkflowError::Daemon(Arc::new(
+                                    daemon_error,
+                                ))
                             }
                         },
                     ))
@@ -74,7 +75,7 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyParams> for Facad
         drop(inner);
 
         // create state reduction task
-        let (tx_state, rx_state) = tokio::sync::watch::channel(WriterVerifyState::initial(
+        let (tx_state, rx_state) = tokio::sync::watch::channel(WVState::initial(
             Instant::now(),
             !params.compression.is_identity(),
             handle.initial_info.input_file_bytes,
@@ -92,8 +93,8 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyParams> for Facad
     }
 }
 
-impl<H: LegacyFacade + Send + 'static> Orchestrator<StartHashParams> for FacadeImpl<H> {
-    async fn start_workflow(&self, _workflow: StartHashParams) -> Watch<HashingState> {
+impl<H: LegacyFacade + Send + 'static> Orchestrator<HashWorkflow> for FacadeImpl<H> {
+    async fn start_workflow(&self, _workflow: HashWorkflow) -> Watch<HashingState> {
         unimplemented!(
             "Until this is implemented, for testing purposes, you may replace this with test values."
         )
@@ -126,8 +127,8 @@ impl<H> DiskWatcher for FacadeImpl<H> {
     }
 }
 
-impl<H> Analyzer for FacadeImpl<H> {
-    async fn analyze_input(&self, _input: PathBuf) -> std::io::Result<InputAnalysis> {
+impl<H> FileAnalyzer for FacadeImpl<H> {
+    async fn analyze_file(&self, _input: PathBuf) -> std::io::Result<FileAnalysis> {
         unimplemented!(
             "Until this is implemented, for testing purposes, you may replace this with test values."
         )

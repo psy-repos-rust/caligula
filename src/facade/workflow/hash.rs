@@ -16,7 +16,7 @@ use crate::{
 
 /// Parameters for starting a new hashing operation.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct StartHashParams {
+pub struct HashWorkflow {
     /// File to use
     pub file: PathBuf,
 
@@ -27,14 +27,8 @@ pub struct StartHashParams {
     pub compression: CompressionFormat,
 }
 
-impl Workflow for StartHashParams {
+impl Workflow for HashWorkflow {
     type State = HashingState;
-}
-
-/// Result from hash starting.
-pub struct HashStarted {
-    /// Handle for watching the state updates of this hasher.
-    pub state: Watch<HashingState>,
 }
 
 /// Active, point-in-time state of a hashing operation.
@@ -48,17 +42,12 @@ pub struct HashingState {
 }
 
 impl HashingState {
-    pub fn new(now: Instant, file_size_bytes: u64) -> Self {
+    fn new(now: Instant, file_size_bytes: u64) -> Self {
         Self {
             read_bytes_history: ByteSeries::new(now),
             file_size_bytes,
             result: None,
         }
-    }
-
-    /// Whether or not this operation is finished.
-    pub fn is_finished(&self) -> bool {
-        self.result.is_some()
     }
 
     pub fn read_bytes_history(&self) -> &ByteSeries {

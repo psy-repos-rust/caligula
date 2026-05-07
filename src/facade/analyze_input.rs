@@ -7,7 +7,7 @@ use bytes::Bytes;
 use crate::{compression::CompressionFormat, hash::HashAlg, util::candidate::Candidates};
 
 /// Result of analyzing an input file for its properties.
-pub struct InputAnalysis {
+pub struct FileAnalysis {
     pub compression: Candidates<CompressionCandidate>,
     pub hash_file: Candidates<HashFile>,
 }

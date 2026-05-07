@@ -3,13 +3,13 @@ use std::sync::Arc;
 use crate::{
     escalation::EscalationMethod,
     facade::{
-        CaligulaFacade, DaemonError,  OrchestratorExt, WriteVerifyParams,
-        WriteVerifyWorkflowError, WriterVerifyState, watch::Watch,
+        CaligulaFacade, DaemonError, OrchestratorExt, WVState, WriteVerifyWorkflow,
+        WriteVerifyWorkflowError, watch::Watch,
     },
     runtime::RemoteSpawn,
 };
 
-pub trait FacadeExt: CaligulaFacade + OrchestratorExt<WriteVerifyParams> {
+pub trait FacadeExt: CaligulaFacade + OrchestratorExt<WriteVerifyWorkflow> {
     /// Like [`CaligulaFacade::start_write_verify()`], but it blocks your thread
     /// while waiting for it to start.
     ///
@@ -19,8 +19,8 @@ pub trait FacadeExt: CaligulaFacade + OrchestratorExt<WriteVerifyParams> {
     fn start_write_verify_blocking(
         self: Arc<Self>,
         spawn: impl RemoteSpawn,
-        params: WriteVerifyParams,
-    ) -> Result<Watch<WriterVerifyState>, Arc<WriteVerifyWorkflowError>> {
+        params: WriteVerifyWorkflow,
+    ) -> Result<Watch<WVState>, Arc<WriteVerifyWorkflowError>> {
         spawn
             .spawn(move || async move {
                 self.as_ref()
@@ -50,4 +50,4 @@ pub trait FacadeExt: CaligulaFacade + OrchestratorExt<WriteVerifyParams> {
     }
 }
 
-impl<O: CaligulaFacade + OrchestratorExt<WriteVerifyParams>> FacadeExt for O {}
+impl<O: CaligulaFacade + OrchestratorExt<WriteVerifyWorkflow>> FacadeExt for O {}

@@ -19,10 +19,10 @@ use super::cli::BurnArgs;
 use crate::{
     device::WriteTarget,
     facade::{
-        CaligulaFacade, DaemonError, WriteVerifyParams, WriterVerifyState, watch::Watch,
+        CaligulaFacade, DaemonError, WVState, WriteVerifyWorkflow, watch::Watch,
         workflow::write_verify::WriteVerifyWorkflowError,
     },
-    herder_api::write_verify::WriteVerifyWorkerError,
+    herder_api::write_verify::LegacyWriteVerifyError,
     logging::LogPaths,
     runtime::RemoteSpawn,
     ui::cli::UseSudo,
@@ -41,14 +41,14 @@ const REFRESH_PERIOD: Duration = Duration::from_millis(250);
 /// Returns the [BeginParams] if the user confirms, and None if the user
 /// doesn't.
 #[tracing::instrument(skip_all)]
-pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<WriteVerifyParams>, anyhow::Error> {
+pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<WriteVerifyWorkflow>, anyhow::Error> {
     let compression = ask_compression(args)?;
     let _hash_info = ask_hash(args, compression)?;
     let target = match &args.out {
         Some(f) => WriteTarget::try_from(f.as_ref())?,
         None => ask_outfile(args)?,
     };
-    let begin_params = WriteVerifyParams::new(args.image.clone(), compression, target)?;
+    let begin_params = WriteVerifyWorkflow::new(args.image.clone(), compression, target)?;
     if !confirm_write(args, &begin_params)? {
         eprintln!("Aborting.");
         return Ok(None);
@@ -57,7 +57,7 @@ pub fn do_setup_wizard(args: &BurnArgs) -> Result<Option<WriteVerifyParams>, any
 }
 
 pub struct Params<'a> {
-    pub child_state: Watch<WriterVerifyState>,
+    pub child_state: Watch<WVState>,
     pub log_paths: &'a LogPaths,
 }
 
@@ -77,10 +77,10 @@ pub enum WriteOrEscalateError {
 pub fn try_start_write_or_escalate(
     facade: Arc<impl CaligulaFacade>,
     runtime: &impl RemoteSpawn,
-    args: &WriteVerifyParams,
+    args: &WriteVerifyWorkflow,
     root: UseSudo,
     interactive: bool,
-) -> Result<Watch<WriterVerifyState>, WriteOrEscalateError> {
+) -> Result<Watch<WVState>, WriteOrEscalateError> {
     tracing::info!("Starting burn without escalation");
 
     let err = match facade
@@ -93,7 +93,7 @@ pub fn try_start_write_or_escalate(
         Err(e) => e,
     };
 
-    if let WriteVerifyWorkflowError::Worker(WriteVerifyWorkerError::PermissionDenied) = err.as_ref()
+    if let WriteVerifyWorkflowError::Worker(LegacyWriteVerifyError::PermissionDenied) = err.as_ref()
     {
         tracing::info!("Unescalated burn failed");
         match (root, interactive) {
@@ -151,10 +151,10 @@ pub fn run<'a>(params: Params<'a>) {
 
         let child_state = params.child_state.borrow();
         match &*child_state {
-            WriterVerifyState::Writing(b) => {
+            WVState::Writing(b) => {
                 write_progress.set_position((b.approximate_ratio() * (length as f64)) as u64)
             }
-            WriterVerifyState::Verifying {
+            WVState::Verifying {
                 verify_hist,
                 total_write_bytes,
                 ..
@@ -162,7 +162,7 @@ pub fn run<'a>(params: Params<'a>) {
                 let ratio = verify_hist.bytes_encountered() as f64 / *total_write_bytes as f64;
                 verify_progress.set_position((ratio * (length as f64)) as u64)
             }
-            WriterVerifyState::Finished { result, .. } => {
+            WVState::Finished { result, .. } => {
                 match result {
                     Err(error) => {
                         println!("Error occurred while writing: {error}");

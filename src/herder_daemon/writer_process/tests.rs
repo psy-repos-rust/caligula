@@ -87,7 +87,10 @@ fn write_file_larger_than_disk(#[values(1032, 2000, 6000, 7000)] file_size: usiz
     };
     let result = test.execute(false);
 
-    assert_matches!(result.execute_result, Err(WriteVerifyWorkerError::EndOfOutput));
+    assert_matches!(
+        result.execute_result,
+        Err(LegacyWriteVerifyError::EndOfOutput)
+    );
     assert_eq!(&result.disk, &result.file[..test.disk_size]);
 }
 
@@ -195,7 +198,10 @@ fn verify_sad_case_works() {
     };
     let result = test.execute();
 
-    assert_eq!(result.return_val, Err(WriteVerifyWorkerError::VerificationFailed));
+    assert_eq!(
+        result.return_val,
+        Err(LegacyWriteVerifyError::VerificationFailed)
+    );
 }
 
 #[rstest]
@@ -242,7 +248,10 @@ fn verify_misaligned_case_sad_path_works(#[case] file_size: usize, #[case] flip_
     };
     let result = test.execute();
 
-    assert_eq!(result.return_val, Err(WriteVerifyWorkerError::VerificationFailed));
+    assert_eq!(
+        result.return_val,
+        Err(LegacyWriteVerifyError::VerificationFailed)
+    );
 }
 
 /// Helpers for these tests. These go in their own little module to enforce
@@ -350,7 +359,7 @@ mod helpers {
         pub file: Vec<u8>,
         pub disk: Vec<u8>,
         pub events: Vec<WriteVerifyEvent>,
-        pub execute_result: Result<u64, WriteVerifyWorkerError>,
+        pub execute_result: Result<u64, LegacyWriteVerifyError>,
     }
 
     impl WriteTest {
@@ -407,7 +416,7 @@ mod helpers {
         pub _requested_file_reads: Vec<usize>,
         pub _requested_disk_reads: Vec<usize>,
         pub _events: Vec<WriteVerifyEvent>,
-        pub return_val: Result<(), WriteVerifyWorkerError>,
+        pub return_val: Result<(), LegacyWriteVerifyError>,
     }
 
     impl VerifyTest {

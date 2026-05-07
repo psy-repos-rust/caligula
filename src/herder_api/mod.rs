@@ -1,3 +1,9 @@
+//! Defines traits and modules for IPC between the child process and parent
+//! process.
+//!
+//! The UI may speak some of these types, but it should prefer to use the
+//! higher-level interfaces defined in [`crate::facade`].
+
 pub mod write_verify;
 
 use std::fmt::{Debug, Display};
