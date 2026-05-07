@@ -7,8 +7,8 @@ use crate::{
     byteseries::{ByteSeries, EstimatedTime},
     compression::CompressionFormat,
     device::WriteTarget,
-    facade::workflow::WorkflowState,
-    herder_api::write_verify::*,
+    facade::{DaemonError, workflow::WorkflowState},
+    herder_api::{write_verify::*},
 };
 
 /// Params for starting a write + verify workflow.
@@ -63,16 +63,39 @@ pub enum WriterVerifyState {
     },
     Finished {
         finish_time: Instant,
-        result: Result<(), Arc<WriteVerifyError>>,
+        result: Result<(), Arc<WriteVerifyWorkflowError>>,
         write_hist: ByteSeries,
         verify_hist: Option<ByteSeries>,
         total_write_bytes: u64,
     },
 }
 
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum WriteVerifyWorkflowError {
+    #[error("Unexpected first status: {0:?}")]
+    UnexpectedFirstStatus(WriteVerifyEvent),
+    #[error("Daemon management error: {0}")]
+    Daemon(#[from] Arc<DaemonError>),
+    #[error("Worker error: {0}")]
+    Worker(#[from] WriteVerifyWorkerError),
+    #[error("Orchestrator panicked!")]
+    Panicked,
+}
+
+impl PartialEq for WriteVerifyWorkflowError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::UnexpectedFirstStatus(l0), Self::UnexpectedFirstStatus(r0)) => l0 == r0,
+            (Self::Daemon(_), Self::Daemon(_)) => true,
+            (Self::Worker(l0), Self::Worker(r0)) => l0 == r0,
+            _ => false,
+        }
+    }
+}
+
 impl WorkflowState for WriterVerifyState {
-    type Error = Arc<WriteVerifyError>;
     type Success = ();
+    type Error = Arc<WriteVerifyWorkflowError>;
 
     fn result(&self) -> Option<&Result<Self::Success, Self::Error>> {
         match self {
@@ -87,10 +110,10 @@ impl WriterVerifyState {
         WriterVerifyState::Writing(Writing::new(now, is_input_compressed, input_file_bytes))
     }
 
-    pub fn error(now: Instant, error: Arc<WriteVerifyError>) -> Self {
+    pub fn error(now: Instant, error: WriteVerifyWorkflowError) -> Self {
         WriterVerifyState::Finished {
             finish_time: now,
-            result: Err(error),
+            result: Err(error.into()),
             write_hist: ByteSeries::new(now),
             verify_hist: None,
             total_write_bytes: 0,
@@ -114,7 +137,7 @@ impl WriterVerifyState {
             }
             Some(WriteVerifyEvent::Error(reason)) => {
                 info!("Received error notification");
-                self.into_finished(now, Err(reason))
+                self.into_finished(now, Err(reason.into()))
             }
             Some(WriteVerifyEvent::Success) => {
                 info!("Received success notification");
@@ -122,7 +145,10 @@ impl WriterVerifyState {
             }
             None => {
                 info!("Messages terminated unexpectedly");
-                self.into_finished(now, Err(WriteVerifyError::UnexpectedTermination))
+                self.into_finished(
+                    now,
+                    Err(WriteVerifyWorkerError::UnexpectedTermination.into()),
+                )
             }
             other => panic!(
                 "Received unexpected child status {:#?}\nCurrent state: {:#?}",
@@ -158,7 +184,11 @@ impl WriterVerifyState {
         };
     }
 
-    fn into_finished(self, now: Instant, error: Result<(), WriteVerifyError>) -> WriterVerifyState {
+    fn into_finished(
+        self,
+        now: Instant,
+        error: Result<(), WriteVerifyWorkflowError>,
+    ) -> WriterVerifyState {
         match self {
             WriterVerifyState::Writing(st) => {
                 let total_write_bytes = st.write_hist.bytes_encountered();
@@ -199,7 +229,7 @@ impl Default for WriterVerifyState {
         let now = Instant::now();
         Self::Finished {
             finish_time: now,
-            result: Err(Arc::new(WriteVerifyError::Panicked)),
+            result: Err(Arc::new(WriteVerifyWorkflowError::Panicked)),
             write_hist: ByteSeries::new(now),
             verify_hist: None,
             total_write_bytes: 0,
@@ -270,7 +300,10 @@ impl Writing {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::{
+        sync::Arc,
+        time::{Duration, Instant},
+    };
 
     use super::WriterVerifyState;
     use crate::{byteseries::ByteSeries, herder_api::write_verify::*};
@@ -350,7 +383,12 @@ mod tests {
                 ..
             } => {
                 assert_eq!(finish_time - t0, Duration::from_secs(2));
-                assert_eq!(error, Err(WriteVerifyError::UnexpectedTermination.into()));
+                assert_eq!(
+                    error,
+                    Err(Arc::new(
+                        WriteVerifyWorkerError::UnexpectedTermination.into()
+                    ))
+                );
             }
             s => panic!("Unexpected {s:#?}"),
         }
