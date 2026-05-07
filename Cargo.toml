@@ -44,6 +44,7 @@ process_path = "0.1.4"
 ratatui = { version = "0.26.3", default-features = false, features = [
   "crossterm",
 ] }
+ringbuf = "0.5.0"
 ruzstd = { version = "0.6.0", default-features = false, features = ["std"] }
 serde = { version = "1.0.228", features = ["derive"] }
 sha1 = "0.10.6"
