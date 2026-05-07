@@ -34,6 +34,7 @@ inquire = { version = "0.7.5", default-features = false, features = [
 is-terminal = "0.4.16"
 itertools = "0.12.1"
 libc = "0.2.177"
+lockfree = "0.5.1"
 lz4_flex = { version = "0.11.6", default-features = false, features = [
   "frame",
 ] }
