@@ -1,19 +1,12 @@
-use std::{
-    fs::File,
-    io::{BufReader, Seek},
-    path::Path,
-    process::exit,
-};
-
-use anyhow::Context;
-use bytesize::ByteSize;
 use indicatif::{ProgressBar, ProgressStyle};
 use inquire::{Confirm, Select, Text};
+use std::{fs::File, io::Seek, path::Path, process::exit};
 
 use crate::{
-    compression::{CompressionFormat, decompress},
-    hash::{FileHashInfo, HashAlg, Hashing, parse_hash_input},
+    compression::CompressionFormat,
+    hash::{FileHashInfo, HashAlg, parse_hash_input},
     hashfile::{find_hash_in_standard_files, find_hash_in_user_file},
+    legacy_io::do_file_hashing,
     ui::cli::{BurnArgs, HashArg, HashOf},
 };
 
@@ -201,23 +194,9 @@ fn do_hashing(path: &Path, params: &BeginHashParams) -> anyhow::Result<FileHashI
             .unwrap(),
     );
 
-    let decompress = decompress(params.hasher_compression, BufReader::new(file))
-        .context("Failed to open input file with decompressor")?;
-
-    let mut hashing = Hashing::new(
-        params.alg,
-        decompress,
-        ByteSize::kib(512).as_u64() as usize, // TODO
-    );
-    loop {
-        for _ in 0..32 {
-            match hashing.next() {
-                Some(_) => {}
-                None => return Ok(hashing.finalize()?),
-            }
-        }
-        progress_bar.set_position(hashing.get_reader_mut().get_mut().stream_position()?);
-    }
+    do_file_hashing(file, params.hasher_compression, params.alg, |bytes| {
+        progress_bar.set_position(bytes)
+    })
 }
 
 #[derive(Debug)]

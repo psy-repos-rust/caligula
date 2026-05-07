@@ -152,7 +152,6 @@ generate! {
     }
 }
 
-
 /// Represents a hashing operation in progress.
 /// This is mostly useful to make a cute progress bar.
 struct GenericHashing<H, R>
@@ -231,6 +230,7 @@ where
 }
 
 /// Represents the full results of hashing.
+#[derive(Debug)]
 pub struct FileHashInfo {
     pub file_hash: Vec<u8>,
 }

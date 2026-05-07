@@ -17,6 +17,7 @@ mod hashfile;
 mod herder_api;
 mod herder_daemon;
 mod ipc_common;
+mod legacy_io;
 mod logging;
 mod native;
 mod runtime;
