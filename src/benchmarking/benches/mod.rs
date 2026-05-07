@@ -9,9 +9,3 @@ pub enum BenchTypes {
     Hash(hash::HashBench),
     Verify(verify::VerifyBench),
 }
-
-pub trait Benchmark: Sized {
-    fn run(self) {
-        todo!()
-    }
-}
