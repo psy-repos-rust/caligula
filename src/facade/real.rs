@@ -6,7 +6,8 @@ use super::legacy_facade::{DaemonError, LegacyFacade, StartWriterError};
 use crate::{
     escalation::EscalationMethod,
     facade::{
-        CaligulaFacade, DiskList, WriteVerifyParams, WriteVerifyStarted, WriterVerifyState,
+        Analyzer,DiskList, DiskWatcher, Escalator, Orchestrator, WriteVerifyParams,
+        WriteVerifyStarted, WriterVerifyState,
         analyze_input::InputAnalysis,
         hash::{HashStarted, StartHashParams},
         watch::Watch,
@@ -38,7 +39,13 @@ impl<H> FacadeImpl<H> {
     }
 }
 
-impl<H: LegacyFacade + Send + 'static> CaligulaFacade for FacadeImpl<H> {
+impl<H: LegacyFacade + Send + 'static> Orchestrator for FacadeImpl<H> {
+    async fn start_hash(&self, _params: StartHashParams) -> std::io::Result<HashStarted> {
+        unimplemented!(
+            "Until this is implemented, for testing purposes, you may replace this with test values."
+        )
+    }
+
     async fn start_write_verify(
         &self,
         params: WriteVerifyParams,
@@ -73,7 +80,9 @@ impl<H: LegacyFacade + Send + 'static> CaligulaFacade for FacadeImpl<H> {
             state,
         })
     }
+}
 
+impl<H: LegacyFacade> Escalator for FacadeImpl<H> {
     async fn escalate(&self, method: Option<EscalationMethod>) -> Result<(), DaemonError> {
         let mut inner = self.inner.lock().await;
         inner.escalation = Some(method);
@@ -89,19 +98,17 @@ impl<H: LegacyFacade + Send + 'static> CaligulaFacade for FacadeImpl<H> {
         };
         lock.escalation.is_some()
     }
+}
 
-    async fn start_hash(&self, _params: StartHashParams) -> std::io::Result<HashStarted> {
-        unimplemented!(
-            "Until this is implemented, for testing purposes, you may replace this with test values."
-        )
-    }
-
+impl<H> DiskWatcher for FacadeImpl<H> {
     fn watch_disks(&self) -> Watch<DiskList> {
         unimplemented!(
             "Until this is implemented, for testing purposes, you may replace this with test values."
         )
     }
+}
 
+impl<H> Analyzer for FacadeImpl<H> {
     async fn analyze_input(&self, _input: PathBuf) -> std::io::Result<InputAnalysis> {
         unimplemented!(
             "Until this is implemented, for testing purposes, you may replace this with test values."

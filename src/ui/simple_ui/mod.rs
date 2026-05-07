@@ -13,13 +13,14 @@ use tracing::debug;
 use self::{
     ask_hash::ask_hash,
     ask_outfile::{ask_compression, ask_outfile, confirm_write},
+    facade_ext::FacadeExt as _,
 };
 use super::cli::BurnArgs;
 use crate::{
     device::WriteTarget,
     facade::{
-        CaligulaFacade, FacadeExt, StartWriterError, WriteVerifyParams, WriteVerifyStarted,
-        WriterVerifyState, watch::Watch,
+        CaligulaFacade, StartWriterError, WriteVerifyParams, WriteVerifyStarted, WriterVerifyState,
+        watch::Watch,
     },
     herder_api::write_verify::{WriteVerifyError, WriteVerifyEvent},
     logging::LogPaths,
@@ -29,6 +30,7 @@ use crate::{
 
 mod ask_hash;
 mod ask_outfile;
+mod facade_ext;
 
 /// How often we refresh the display
 const REFRESH_PERIOD: Duration = Duration::from_millis(250);

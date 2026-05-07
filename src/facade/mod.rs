@@ -1,7 +1,7 @@
 //! Exposes the [`CaligulaFacade`], which is a facade that orchestrates all
 //! "high-level" work and tracks the state of worker tasks.
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
 pub use self::{
     disks::DiskList,
@@ -10,8 +10,7 @@ pub use self::{
     write_verify::{WriteVerifyParams, WriteVerifyStarted, WriterVerifyState},
 };
 use crate::{
-    escalation::EscalationMethod, facade::analyze_input::InputAnalysis,
-    herder_api::write_verify::*, runtime::RemoteSpawn,
+    escalation::EscalationMethod, facade::analyze_input::InputAnalysis, herder_api::write_verify::*,
 };
 
 mod analyze_input;
@@ -41,27 +40,17 @@ mod write_verify;
 /// The API for this can be considered "mostly" stable. I'll be changing out the
 /// error types, but in general, the overall shape of this API can be used for
 /// new UI developments.
-pub trait CaligulaFacade: Sync + Send + 'static {
-    /// Analyze an input file to guess how we should handle it.
-    ///
-    /// Returns the results of the analysis, or an error if the file could not
-    /// be read. This method is fault-tolerant, so the only errors that can
-    /// cause this operation to fail are I/O errors.
-    ///
-    /// The intended workflow is that you call it once, to fill up your UI's
-    /// wizard with data, and then ask the user for more information if
-    /// there's anything that's not certain.
-    #[expect(unused, reason = "Stub interface created for later use.")]
-    async fn analyze_input(&self, input: PathBuf) -> std::io::Result<InputAnalysis>;
+pub trait CaligulaFacade:
+    Sync + Send + DiskWatcher + Analyzer + Escalator + Orchestrator + 'static
+{
+}
 
-    /// Get a handle for watching the list of disks available. This may update
-    /// as disks are added and removed to the system.
-    ///
-    /// Although this returns a handle immediately, the initial results may take
-    /// a while to load.
-    #[expect(unused, reason = "Stub interface created for later use.")]
-    fn watch_disks(&self) -> watch::Watch<DiskList>;
+impl<F> CaligulaFacade for F where
+    F: Sync + Send + DiskWatcher + Analyzer + Escalator + Orchestrator + 'static
+{
+}
 
+pub trait Orchestrator {
     /// Read a file and calculate its hash in a background thread.
     ///
     /// Returns when the file is opened and the thread is running, with a handle
@@ -77,7 +66,33 @@ pub trait CaligulaFacade: Sync + Send + 'static {
         &self,
         params: WriteVerifyParams,
     ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>>;
+}
 
+pub trait DiskWatcher {
+    /// Get a handle for watching the list of disks available. This may update
+    /// as disks are added and removed to the system.
+    ///
+    /// Although this returns a handle immediately, the initial results may take
+    /// a while to load.
+    #[expect(unused, reason = "Stub interface created for later use.")]
+    fn watch_disks(&self) -> watch::Watch<DiskList>;
+}
+
+pub trait Analyzer {
+    /// Analyze an input file to guess how we should handle it.
+    ///
+    /// Returns the results of the analysis, or an error if the file could not
+    /// be read. This method is fault-tolerant, so the only errors that can
+    /// cause this operation to fail are I/O errors.
+    ///
+    /// The intended workflow is that you call it once, to fill up your UI's
+    /// wizard with data, and then ask the user for more information if
+    /// there's anything that's not certain.
+    #[expect(unused, reason = "Stub interface created for later use.")]
+    async fn analyze_input(&self, input: PathBuf) -> std::io::Result<InputAnalysis>;
+}
+
+pub trait Escalator {
     /// Attempt to spawn a child process as root using the provided escalation
     /// method (or [`None`] to automatically guess which one to use).
     ///
@@ -102,41 +117,3 @@ pub trait CaligulaFacade: Sync + Send + 'static {
 pub fn make_real_facade(log_path: &str) -> impl CaligulaFacade {
     self::real::FacadeImpl::new(legacy_facade::make_legacy_facade_impl(log_path))
 }
-
-pub trait FacadeExt: CaligulaFacade {
-    /// Like [`CaligulaFacade::start_write_verify()`], but it blocks your thread
-    /// while waiting for it to start.
-    ///
-    /// THIS SHOULD ABSOLUTELY NOT UNDER ANY CIRCUMSTANCES be used in an async
-    /// context! Just use the non-blocking version of the trait! It's mostly
-    /// only useful for the simple UI wizard, which is inherently blocky.
-    fn start_write_verify_blocking(
-        self: Arc<Self>,
-        spawn: impl RemoteSpawn,
-        params: WriteVerifyParams,
-    ) -> Result<WriteVerifyStarted, StartWriterError<WriteVerifyEvent>> {
-        spawn
-            .spawn(move || async move { self.start_write_verify(params).await })
-            .blocking_recv()
-            .expect("remote task dropped!")
-    }
-
-    /// Like [`CaligulaFacade::escalate()`], but it blocks your thread while
-    /// waiting for it to start.
-    ///
-    /// THIS SHOULD ABSOLUTELY NOT UNDER ANY CIRCUMSTANCES be used in an async
-    /// context! Just use the non-blocking version of the trait! It's mostly
-    /// only useful for the simple UI wizard, which is inherently blocky.
-    fn escalate_blocking(
-        self: Arc<Self>,
-        spawn: impl RemoteSpawn,
-        method: Option<EscalationMethod>,
-    ) -> Result<(), DaemonError> {
-        spawn
-            .spawn(move || async move { self.escalate(method).await })
-            .blocking_recv()
-            .expect("remote task dropped!")
-    }
-}
-
-impl<O: CaligulaFacade> FacadeExt for O {}
