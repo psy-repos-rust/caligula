@@ -33,3 +33,32 @@ pub trait WorkflowState: Sync + 'static {
     /// workflow is still running.
     fn result(&self) -> Option<&Result<Self::Success, Self::Error>>;
 }
+
+pub trait OrchestratorExt<W: Workflow>: Orchestrator<W> {
+    /// Helper method for starting a workflow and checking if it immediately errored
+    /// before continuing.
+    async fn start_workflow_checked(
+        &self,
+        workflow: W,
+    ) -> Result<Watch<W::State>, (Watch<W::State>, <W::State as WorkflowState>::Error)>
+    where
+        <W::State as WorkflowState>::Error: Clone,
+    {
+        let h = self.start_workflow(workflow).await;
+        let err = match h.borrow().result() {
+            Some(Err(e)) => Some(e.clone()),
+            _ => None,
+        };
+        if let Some(err) = err {
+            return Err((h, err));
+        }
+        Ok(h)
+    }
+}
+
+impl<O, W> OrchestratorExt<W> for O
+where
+    W: Workflow,
+    O: Orchestrator<W>,
+{
+}

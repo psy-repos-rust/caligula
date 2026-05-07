@@ -8,7 +8,7 @@ use crate::{
     compression::CompressionFormat,
     device::WriteTarget,
     facade::{DaemonError, workflow::WorkflowState},
-    herder_api::{write_verify::*},
+    herder_api::write_verify::*,
 };
 
 /// Params for starting a write + verify workflow.
@@ -72,8 +72,8 @@ pub enum WriterVerifyState {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum WriteVerifyWorkflowError {
-    #[error("Unexpected first status: {0:?}")]
-    UnexpectedFirstStatus(WriteVerifyEvent),
+    #[error("Unexpected first event: {0:?}")]
+    Unexpected(WriteVerifyEvent),
     #[error("Daemon management error: {0}")]
     Daemon(#[from] Arc<DaemonError>),
     #[error("Worker error: {0}")]
@@ -85,7 +85,6 @@ pub enum WriteVerifyWorkflowError {
 impl PartialEq for WriteVerifyWorkflowError {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::UnexpectedFirstStatus(l0), Self::UnexpectedFirstStatus(r0)) => l0 == r0,
             (Self::Daemon(_), Self::Daemon(_)) => true,
             (Self::Worker(l0), Self::Worker(r0)) => l0 == r0,
             _ => false,

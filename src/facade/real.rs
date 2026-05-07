@@ -1,4 +1,4 @@
-use std::{path::PathBuf, time::Instant};
+use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use futures::StreamExt;
 
@@ -45,11 +45,31 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyParams> for Facad
         // request the herder to start the action
         let mut inner = self.inner.lock().await;
         let esc = inner.escalation.is_some();
-        let Ok(handle) = inner.h.start_herd(params.make_child_config(), esc).await else {
-            todo!()
-            /*return Watch {
-                rx: tokio::sync::watch::channel(WriterVerifyState::error(todo!())).1,
-            };*/
+        let handle: crate::facade::legacy_facade::HerdHandle<
+            crate::herder_api::write_verify::WriteVerifyEvent,
+        > = match inner.h.start_herd(params.make_child_config(), esc).await {
+            Ok(handle) => handle,
+            Err(e) => {
+                // oh god what a shitshow
+                // TODO: refactor the shit out of this thing
+                return Watch {
+                    rx: tokio::sync::watch::channel(WriterVerifyState::error(
+                        Instant::now(),
+                        match e {
+                            crate::facade::StartWriterError::UnexpectedFirstStatus(s) => {
+                                crate::facade::WriteVerifyWorkflowError::Unexpected(s)
+                            }
+                            crate::facade::StartWriterError::Failed(f) => {
+                                crate::facade::WriteVerifyWorkflowError::Worker(f)
+                            }
+                            crate::facade::StartWriterError::DaemonError(daemon_error) => {
+                                crate::facade::WriteVerifyWorkflowError::Daemon(Arc::new(daemon_error))
+                            }
+                        },
+                    ))
+                    .1,
+                };
+            }
         };
         drop(inner);
 

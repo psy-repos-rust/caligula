@@ -19,10 +19,10 @@ use super::cli::BurnArgs;
 use crate::{
     device::WriteTarget,
     facade::{
-        CaligulaFacade, StartWriterError, WriteVerifyParams, WriterVerifyState, watch::Watch,
-        workflow::{WorkflowState, write_verify::WriteVerifyWorkflowError},
+        CaligulaFacade, DaemonError, WriteVerifyParams, WriterVerifyState, watch::Watch,
+        workflow::write_verify::WriteVerifyWorkflowError,
     },
-    herder_api::write_verify::{WriteVerifyWorkerError},
+    herder_api::write_verify::WriteVerifyWorkerError,
     logging::LogPaths,
     runtime::RemoteSpawn,
     ui::cli::UseSudo,
@@ -61,6 +61,14 @@ pub struct Params<'a> {
     pub log_paths: &'a LogPaths,
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum WriteOrEscalateError {
+    #[error("Error spawning writer: {0}")]
+    Write(#[from] Arc<WriteVerifyWorkflowError>),
+    #[error("Error escalating: {0}")]
+    Escalate(#[from] DaemonError),
+}
+
 /// Attempt to start burning the disk with the given params.
 ///
 /// If received permission denied, figures out if it needs to ask the user to
@@ -72,20 +80,21 @@ pub fn try_start_write_or_escalate(
     args: &WriteVerifyParams,
     root: UseSudo,
     interactive: bool,
-) -> Result<Watch<WriterVerifyState>, WriteVerifyWorkflowError> {
+) -> Result<Watch<WriterVerifyState>, WriteOrEscalateError> {
     tracing::info!("Starting burn without escalation");
 
-    let h = facade
+    let err = match facade
         .clone()
-        .start_write_verify_blocking(runtime, args.clone());
-    let err = match h.borrow().result() {
-        Some(Err(e)) => e,
-        _ => {
-            return Ok(h);
+        .start_write_verify_blocking(runtime, args.clone())
+    {
+        Ok(p) => {
+            return Ok(p);
         }
+        Err(e) => e,
     };
 
-    if let StartWriterError::Failed(WriteVerifyWorkerError::PermissionDenied) = err.as_ref() {
+    if let WriteVerifyWorkflowError::Worker(WriteVerifyWorkerError::PermissionDenied) = err.as_ref()
+    {
         tracing::info!("Unescalated burn failed");
         match (root, interactive) {
             (UseSudo::Ask, true) => {
@@ -104,18 +113,18 @@ pub fn try_start_write_or_escalate(
 
                 if response {
                     facade.clone().escalate_blocking(runtime, None)?;
-                    return facade.start_write_verify_blocking(runtime, args.clone());
+                    return Ok(facade.start_write_verify_blocking(runtime, args.clone())?);
                 }
             }
             (UseSudo::Always, _) => {
                 facade.clone().escalate_blocking(runtime, None)?;
-                return facade.start_write_verify_blocking(runtime, args.clone());
+                return Ok(facade.start_write_verify_blocking(runtime, args.clone())?);
             }
             _ => {}
         }
     }
 
-    Err(err)
+    Err(err)?
 }
 
 /// Run the simple TUI.

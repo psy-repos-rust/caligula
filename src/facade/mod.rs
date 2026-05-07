@@ -7,8 +7,8 @@ pub use self::{
     disks::DiskList,
     legacy_facade::{DaemonError, StartWriterError},
     workflow::{
-        Orchestrator,
-        write_verify::{WriteVerifyParams, WriterVerifyState},
+        Orchestrator, OrchestratorExt,
+        write_verify::{WriteVerifyParams, WriteVerifyWorkflowError, WriterVerifyState},
     },
 };
 use crate::{
