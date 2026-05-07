@@ -4,7 +4,7 @@ mod verify;
 mod write;
 
 #[derive(Subcommand, Debug)]
-pub enum BenchTypes {
+pub enum BenchType {
     Write(write::WriteBench),
     Hash(hash::HashBench),
     Verify(verify::VerifyBench),

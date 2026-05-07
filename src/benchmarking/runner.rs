@@ -1,5 +1,7 @@
 use std::{
+    path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
+    thread::Scope,
     time::{Duration, Instant},
 };
 
@@ -11,56 +13,86 @@ use crate::ui::ByteSpeed;
 
 const REFRESH_PERIOD: Duration = Duration::from_millis(250);
 
-pub fn run_benchmark(b: impl Benchmark) {
-    let ctx = BenchContext::default();
-    let denominator = b.progress_denominator();
-    std::thread::scope(|s| {
-        // set up the benchmark
-        let b = b.clone();
-        let ctx = &ctx;
+#[derive(clap::Parser, Debug)]
+pub struct BenchRunnerParams {
+    /// How many times to run the requested benchmark.
+    #[arg(short = 'n', long, default_value = "1")]
+    pub count: u32,
 
-        // run it in a scoped thread
-        let handle = s.spawn(move || {
-            let start = Instant::now();
-            b.run(ctx);
-            start.elapsed()
+    /// Cooldown period to wait between repetitions.
+    #[arg(short = 'T', long, default_value = "0")]
+    pub cooldown_secs: u32,
+
+    /// File to write JSON results to. If not specified, writes to stdout.
+    #[arg(short, long, default_value = "0")]
+    pub output_file: Option<PathBuf>,
+}
+
+pub fn run_benchmarks(b: impl Benchmark, params: BenchRunnerParams) {
+    let cooldown = Duration::from_secs(params.cooldown_secs.into());
+    for i in 1..=params.count {
+        let ctx = BenchContext::default();
+
+        std::thread::scope(|s| {
+            run_once(i, params.count, b.clone(), &ctx, s);
         });
 
-        // render a progress bar!
-        const IN_PROGRESS: &str = "[{elapsed_precise}] {msg:>10} {wide_bar:.yellow} {percent:>3}%";
-        const DONE: &str = "[{elapsed_precise}] {msg:>10} {wide_bar:.green} {percent:>3}%";
-        let len = 80;
-        let bar = ProgressBar::new(len)
-            .with_message("Running benchmark")
-            .with_style(ProgressStyle::with_template(IN_PROGRESS).unwrap());
-
-        // omg so pretty
-        while !handle.is_finished() {
-            std::thread::sleep(REFRESH_PERIOD);
-            let progress = ctx.progress.load(Ordering::Relaxed);
-            bar.set_position((progress as f32 * len as f32 / denominator as f32) as u64);
+        if !cooldown.is_zero() && i != params.count {
+            eprintln!("Pausing for {cooldown:?}");
+            std::thread::sleep(cooldown);
         }
+    }
+}
 
-        // set to 100% progress
-        bar.set_style(ProgressStyle::with_template(DONE).unwrap());
-        bar.set_position(len);
+fn run_once<'scope, 'env>(
+    i: u32,
+    total: u32,
+    b: impl Benchmark,
+    ctx: &'scope BenchContext,
+    s: &'scope Scope<'scope, 'env>,
+) {
+    let denominator = b.progress_denominator();
 
-        // print the report
-        let wall_time = handle.join().unwrap();
-        let bytes_in = ctx.bytes_in.load(Ordering::Relaxed);
-        let bytes_out = ctx.bytes_out.load(Ordering::Relaxed);
-        eprintln!("Time elapsed: {wall_time:?}");
-        eprintln!("Bytes in:     {}", ByteSize::b(bytes_in));
-        eprintln!("Bytes out:    {}", ByteSize::b(bytes_out));
-        eprintln!(
-            "Input rate:   {}",
-            ByteSpeed(bytes_in as f64 / wall_time.as_secs_f64())
-        );
-        eprintln!(
-            "Output rate:  {}",
-            ByteSpeed(bytes_out as f64 / wall_time.as_secs_f64())
-        );
+    // spawn the thread
+    let b = b.clone();
+    let handle = s.spawn(move || {
+        let start = Instant::now();
+        b.run(ctx);
+        start.elapsed()
     });
+
+    // render a progress bar!
+    let len = 80;
+    let bar = ProgressBar::new(len)
+        .with_message("Running benchmark")
+        .with_style(make_progress_style(i, total, false));
+
+    // omg so pretty
+    while !handle.is_finished() {
+        std::thread::sleep(REFRESH_PERIOD);
+        let progress = ctx.progress.load(Ordering::Relaxed);
+        bar.set_position((progress as f64 * len as f64 / denominator as f64) as u64);
+    }
+
+    // set to 100% progress
+    bar.set_style(make_progress_style(i, total, true));
+    bar.set_position(len);
+
+    // print the report
+    let wall_time = handle.join().unwrap();
+    let bytes_in = ctx.bytes_in.load(Ordering::Relaxed);
+    let bytes_out = ctx.bytes_out.load(Ordering::Relaxed);
+    eprintln!("Time elapsed: {wall_time:?}");
+    eprintln!("Bytes in:     {}", ByteSize::b(bytes_in));
+    eprintln!("Bytes out:    {}", ByteSize::b(bytes_out));
+    eprintln!(
+        "Input rate:   {}",
+        ByteSpeed(bytes_in as f64 / wall_time.as_secs_f64())
+    );
+    eprintln!(
+        "Output rate:  {}",
+        ByteSpeed(bytes_out as f64 / wall_time.as_secs_f64())
+    );
 }
 
 #[derive(Default)]
@@ -87,4 +119,29 @@ impl BenchContext {
 pub trait Benchmark: Clone + Sized + Send + Serialize + DeserializeOwned + 'static {
     fn progress_denominator(&self) -> u64;
     fn run(self: Self, ctx: &BenchContext);
+}
+
+fn make_progress_style(i: u32, total: u32, is_done: bool) -> ProgressStyle {
+    use std::fmt::Write as _;
+
+    const IN_PROGRESS: &str = "[{elapsed_precise}] {msg:>10} {wide_bar:.yellow} {percent:>3}%";
+    const DONE: &str = "[{elapsed_precise}] {msg:>10} {wide_bar:.green} {percent:>3}%";
+
+    let mut template = String::new();
+
+    // left pad
+    let max_len = total.to_string().len();
+    let i = i.to_string();
+    for _ in 0..(max_len - i.len()) {
+        template.push(' ');
+    }
+
+    write!(&mut template, "{i}/{total}: ").unwrap();
+
+    match is_done {
+        true => template.push_str(DONE),
+        false => template.push_str(IN_PROGRESS),
+    }
+
+    ProgressStyle::with_template(&template).unwrap()
 }

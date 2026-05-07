@@ -28,6 +28,7 @@ pub struct HashBench {
 
 impl Benchmark for HashBench {
     fn run(self: Self, ctx: &BenchContext) {
+        let size = self.progress_denominator();
         do_file_hashing(
             File::open(self.input).unwrap(),
             self.compression,
@@ -38,6 +39,7 @@ impl Benchmark for HashBench {
             },
         )
         .unwrap();
+        ctx.log_bytes_in(size);
     }
 
     fn progress_denominator(&self) -> u64 {

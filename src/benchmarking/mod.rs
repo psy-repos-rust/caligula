@@ -8,14 +8,14 @@ pub use self::cli::BenchArgs;
 pub use self::runner::{BenchContext, Benchmark};
 use cli::BenchSubcommands;
 
-use crate::benchmarking::runner::run_benchmark;
+use crate::benchmarking::runner::run_benchmarks;
 
 pub fn main(args: BenchArgs) {
     match args.command {
         BenchSubcommands::Run(args) => match args.type_ {
-            benches::BenchTypes::Write(b) => run_benchmark(b),
-            benches::BenchTypes::Hash(b) => run_benchmark(b),
-            benches::BenchTypes::Verify(b) => run_benchmark(b),
+            benches::BenchType::Write(b) => run_benchmarks(b, args.runner_params),
+            benches::BenchType::Hash(b) => run_benchmarks(b, args.runner_params),
+            benches::BenchType::Verify(b) => run_benchmarks(b, args.runner_params),
         },
         BenchSubcommands::Report(args) => self::report::main(args),
     }

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use crate::benchmarking::benches::BenchTypes;
+use crate::benchmarking::{benches::BenchType, runner::BenchRunnerParams};
 
 /// Caligula benchmarking subsystem.
 ///
@@ -37,5 +37,8 @@ pub struct ReportBenchArgs {
 pub struct RunBenchArgs {
     /// Which benchmark to run.
     #[command(name = "type", subcommand)]
-    pub type_: BenchTypes,
+    pub type_: BenchType,
+
+    #[clap(flatten)]
+    pub runner_params: BenchRunnerParams,
 }
