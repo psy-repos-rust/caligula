@@ -27,7 +27,9 @@ pub struct HashBenchParams {
 }
 
 impl BenchmarkParams for HashBenchParams {
-    fn setup(&self, ctx: &BenchContext) -> Box<dyn Benchmark> {
+    type Report = ();
+
+    fn setup(&self, ctx: &BenchContext) -> Box<dyn Benchmark<Report = Self::Report>> {
         let this = self.clone();
 
         let file = File::open(&this.input).unwrap();
@@ -41,6 +43,7 @@ impl BenchmarkParams for HashBenchParams {
             })
             .unwrap();
             ctx.log_bytes_in(size);
+            Box::new(|| ())
         })
     }
 }

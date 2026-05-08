@@ -10,7 +10,7 @@ license = "GPL-3.0"
 
 [features]
 default = []
-bench = ["dep:askama", "dep:plotters", "dep:serde_json"]
+bench = ["dep:askama", "dep:plotters", "dep:serde_json", "chrono/serde"]
 
 [dependencies]
 aligned-vec = "0.5.0"

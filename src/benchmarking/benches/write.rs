@@ -36,7 +36,9 @@ pub struct WriteBench {
 }
 
 impl BenchmarkParams for WriteBench {
-    fn setup(&self, ctx: &BenchContext) -> Box<dyn Benchmark> {
+    type Report = ();
+
+    fn setup(&self, ctx: &BenchContext) -> Box<dyn Benchmark<Report = Self::Report>> {
         let this = self.clone();
 
         let file = File::open(&this.image).expect("failed to open image");
@@ -61,6 +63,8 @@ impl BenchmarkParams for WriteBench {
                 _ => (),
             })
             .expect("operation failed");
+
+            Box::new(|| ())
         })
     }
 }

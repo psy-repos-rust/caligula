@@ -25,7 +25,7 @@ pub enum BenchSubcommands {
 pub struct ReportBenchArgs {
     /// File to write HTML report to. If not provided, writes to stdout.
     #[arg(short, long)]
-    pub out: Option<PathBuf>,
+    pub output_file: Option<PathBuf>,
 
     /// Files to read from. If not provided, reads from stdin.
     pub result_files: Vec<PathBuf>,

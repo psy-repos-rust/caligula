@@ -1,4 +1,6 @@
 use std::{
+    fs::File,
+    io::Write,
     path::PathBuf,
     sync::atomic::{AtomicU64, Ordering},
     thread::Scope,
@@ -6,10 +8,14 @@ use std::{
 };
 
 use bytesize::ByteSize;
+use chrono::Utc;
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::ui::ByteSpeed;
+use crate::{
+    benchmarking::result::{BenchRun, BenchRunType, BenchTypeData},
+    ui::ByteSpeed,
+};
 
 const REFRESH_PERIOD: Duration = Duration::from_millis(250);
 
@@ -24,21 +30,53 @@ pub struct BenchRunnerParams {
     pub cooldown_secs: u32,
 
     /// File to write JSON results to. If not specified, writes to stdout.
-    #[arg(short, long, default_value = "0")]
+    #[arg(short, long)]
     pub output_file: Option<PathBuf>,
+
+    /// If provided, the JSON results will be formatted with pretty indentation.
+    #[arg(long)]
+    pub output_pretty: bool,
 }
 
-pub fn run_benchmarks(b: impl BenchmarkParams, params: BenchRunnerParams) {
-    let cooldown = Duration::from_secs(params.cooldown_secs.into());
-    for i in 1..=params.count {
-        let ctx = BenchContext::default();
-        let b = b.setup(&ctx);
+pub fn run_benchmarks<B: BenchmarkParams>(bench_params: B, runner_params: BenchRunnerParams)
+where
+    BenchRunType: From<BenchTypeData<B>>,
+{
+    let mut output: Box<dyn Write> = match runner_params.output_file {
+        Some(f) => Box::new(File::create(f).expect("Failed to open output for writing")),
+        None => Box::new(std::io::stdout()),
+    };
 
-        let count = params.count;
+    let cooldown = Duration::from_secs(runner_params.cooldown_secs.into());
+    for i in 1..=runner_params.count {
+        let ctx = BenchContext::default();
+        let bench = bench_params.setup(&ctx);
+
+        let date_ran = Utc::now();
+        let count = runner_params.count;
         let ctxref = &ctx;
-        std::thread::scope(move |s| {
-            run_once(i, count, b, ctxref, s);
-        });
+        let (wall_time, result) = std::thread::scope(move |s| run_once(i, count, bench, ctxref, s));
+
+        let run_result = BenchRun {
+            date_ran,
+            wall_time,
+            r#type: BenchRunType::from(BenchTypeData {
+                params: bench_params.clone(),
+                result,
+            }),
+        };
+
+        (|| {
+            if runner_params.output_pretty {
+                serde_json::to_writer_pretty(&mut output, &run_result)?;
+            } else {
+                serde_json::to_writer(&mut output, &run_result)?;
+            }
+            writeln!(output)?;
+            output.flush()?;
+            Ok::<_, std::io::Error>(())
+        })()
+        .expect("Failed to write bench result to output!");
 
         if !cooldown.is_zero() && i != count {
             eprintln!("Pausing for {cooldown:?}");
@@ -47,24 +85,28 @@ pub fn run_benchmarks(b: impl BenchmarkParams, params: BenchRunnerParams) {
     }
 }
 
-fn run_once<'scope, 'env>(
+fn run_once<'scope, 'env, R>(
     i: u32,
     total: u32,
-    b: Box<dyn Benchmark>,
+    b: Box<dyn Benchmark<Report = R>>,
     ctx: &'scope BenchContext,
     s: &'scope Scope<'scope, 'env>,
-) {
+) -> (Duration, R)
+where
+    R: Serialize + DeserializeOwned + Send + 'static,
+{
     // spawn the thread
     let handle = s.spawn(move || {
         let start = Instant::now();
-        b.run(ctx);
-        start.elapsed()
+        let report = b.run(ctx);
+        let elapsed = start.elapsed();
+        (elapsed, report())
     });
 
     // render a progress bar!
     let len = 80;
     let bar = ProgressBar::new(len)
-        .with_message("Running benchmark")
+        .with_message("Bench")
         .with_style(make_progress_style(i, total, false));
 
     // omg so pretty
@@ -80,7 +122,7 @@ fn run_once<'scope, 'env>(
     bar.set_position(len);
 
     // print the report
-    let wall_time = handle.join().unwrap();
+    let (wall_time, report) = handle.join().unwrap();
     let bytes_in = ctx.bytes_in.load(Ordering::Relaxed);
     let bytes_out = ctx.bytes_out.load(Ordering::Relaxed);
     eprintln!("Time elapsed: {wall_time:?}");
@@ -94,6 +136,8 @@ fn run_once<'scope, 'env>(
         "Output rate:  {}",
         ByteSpeed(bytes_out as f64 / wall_time.as_secs_f64())
     );
+
+    (wall_time, report)
 }
 
 /// Interface available for benchmarks to log data to.
@@ -124,33 +168,43 @@ impl BenchContext {
 }
 
 /// Canned arguments for creating benchmarks.
-pub trait BenchmarkParams: Sync + Serialize + DeserializeOwned + 'static {
+pub trait BenchmarkParams: Clone + Sync + Serialize + DeserializeOwned + 'static {
+    /// Additional data to report from this benchmark.
+    type Report: Serialize + DeserializeOwned + Send + 'static;
+
     /// Prepare a benchmark to be executed.
-    fn setup(&self, ctx: &BenchContext) -> Box<dyn Benchmark>;
+    fn setup(&self, ctx: &BenchContext) -> Box<dyn Benchmark<Report = Self::Report>>;
 }
 
 /// A benchmark that has been fully set up, and is ready to be executed.
 pub trait Benchmark: Send + 'static {
+    /// Additional data to report from this benchmark.
+    type Report: Serialize + DeserializeOwned + Send + 'static;
+
     /// Execute the benchmark.
-    fn run(self: Box<Self>, ctx: &BenchContext);
+    fn run(self: Box<Self>, ctx: &BenchContext) -> Box<dyn FnOnce() -> Self::Report>;
 }
 
-impl<F> Benchmark for F
+impl<F, R, RF> Benchmark for F
 where
-    F: FnOnce(&BenchContext) + Send + 'static,
+    F: FnOnce(&BenchContext) -> RF + Send + 'static,
+    R: Serialize + DeserializeOwned + Send + 'static,
+    RF: FnOnce() -> R + 'static,
 {
-    fn run(self: Box<Self>, ctx: &BenchContext) {
-        (self)(ctx)
+    type Report = R;
+
+    fn run(self: Box<Self>, ctx: &BenchContext) -> Box<dyn FnOnce() -> Self::Report> {
+        Box::new((self)(ctx))
     }
 }
 
 fn make_progress_style(i: u32, total: u32, is_done: bool) -> ProgressStyle {
     use std::fmt::Write as _;
 
-    const IN_PROGRESS: &str = "[{elapsed_precise}] {msg:>10} {wide_bar:.yellow} {percent:>3}%";
-    const DONE: &str = "[{elapsed_precise}] {msg:>10} {wide_bar:.green} {percent:>3}%";
+    const IN_PROGRESS: &str = "[{elapsed_precise}] {wide_bar:.yellow} {percent:>3}%";
+    const DONE: &str = "[{elapsed_precise}] {wide_bar:.green} {percent:>3}%";
 
-    let mut template = String::new();
+    let mut template = String::from("{msg} ");
 
     // left pad
     let max_len = total.to_string().len();
