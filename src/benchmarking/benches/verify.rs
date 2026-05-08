@@ -7,7 +7,7 @@ use crate::{
     benchmarking::{BenchContext, Benchmark, runner::BenchmarkParams},
     compression::CompressionFormat,
     herder_api::write_verify::WriteVerifyEvent,
-    legacy_io::VerifyOp,
+    legacy_io::{VerifyOp, open_blockdev},
 };
 
 /// Disk verification benchmark.
@@ -43,7 +43,7 @@ impl BenchmarkParams for VerifyBench {
         let this = self.clone();
 
         let file = File::open(&this.image).expect("failed to open image");
-        let disk = File::open(&this.disk).expect("failed to open disk");
+        let disk = open_blockdev(&this.disk, self.compression).expect("failed to open disk");
         ctx.set_progress_denominator(file.metadata().unwrap().len());
 
         Box::new(move |ctx: &BenchContext| {

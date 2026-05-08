@@ -7,7 +7,7 @@ use crate::{
     benchmarking::{BenchContext, Benchmark, runner::BenchmarkParams},
     compression::CompressionFormat,
     herder_api::write_verify::WriteVerifyEvent,
-    legacy_io::WriteOp,
+    legacy_io::{WriteOp, open_blockdev},
 };
 
 /// Disk write benchmark.
@@ -23,7 +23,7 @@ pub struct WriteBench {
     pub disk: PathBuf,
 
     /// What compression format the input file is in.
-    #[arg(short = 'z', long, default_value = "none")]
+    #[arg(short = 'z', long, default_value = "identity")]
     pub compression: CompressionFormat,
 
     #[arg(long, default_value = "1048576")]
@@ -43,7 +43,7 @@ impl BenchmarkParams for WriteBench {
         let this = self.clone();
 
         let file = File::open(&this.image).expect("failed to open image");
-        let disk = File::open(&this.disk).expect("failed to open disk");
+        let disk = open_blockdev(&this.disk, self.compression).expect("failed to open disk");
         ctx.set_progress_denominator(file.metadata().unwrap().len());
 
         Box::new(move |ctx: &BenchContext| {
