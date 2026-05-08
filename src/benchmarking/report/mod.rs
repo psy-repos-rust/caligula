@@ -1,4 +1,9 @@
-use std::{fmt::Debug, fs::File, io::Read};
+use std::{
+    collections::{BTreeSet, HashSet},
+    fmt::Debug,
+    fs::File,
+    io::Read,
+};
 
 use itertools::Itertools as _;
 use statrs::statistics::Statistics;
@@ -17,7 +22,7 @@ pub fn main(args: ReportBenchArgs) {
         }
         _ => args
             .result_files
-            .into_iter()
+            .iter()
             .map(File::open)
             .map_ok(|f| -> Box<dyn Read> { Box::new(f) })
             .collect::<std::io::Result<Vec<Box<dyn Read>>>>()
@@ -28,9 +33,9 @@ pub fn main(args: ReportBenchArgs) {
     let first = benches.peek().expect("got empty list of benchmarks!");
 
     match first.r#type {
-        AnyBenchType::Hash(_) => write_report::<HashBenchParams>(downcast_benches(benches)),
-        AnyBenchType::Write(_) => write_report::<WriteBench>(downcast_benches(benches)),
-        AnyBenchType::Verify(_) => write_report::<VerifyBench>(downcast_benches(benches)),
+        AnyBenchType::Hash(_) => write_report::<HashBenchParams>(downcast_benches(benches), &args),
+        AnyBenchType::Write(_) => write_report::<WriteBench>(downcast_benches(benches), &args),
+        AnyBenchType::Verify(_) => write_report::<VerifyBench>(downcast_benches(benches), &args),
     }
     .expect("Failed to write report!");
 }
@@ -57,17 +62,42 @@ where
 
 fn write_report<B: BenchmarkParams>(
     benches: impl IntoIterator<Item = BenchRun<BenchTypeData<B>>>,
+    args: &ReportBenchArgs,
 ) -> std::io::Result<()> {
     let benches = benches.into_iter().collect_vec();
-    let times = benches
-        .iter()
-        .map(|b| b.common.wall_time.as_secs_f64())
-        .collect_vec();
+    let base_tags = args.base.iter().cloned().collect::<HashSet<_>>();
 
+    match args.base.is_empty() {
+        true => report_aggregate(&time_vec(&benches)),
+
+        false => {
+            let (base, compare): (Vec<_>, Vec<_>) = benches
+                .iter()
+                .partition(|x| x.common.tags.is_superset(&base_tags));
+
+            report_comparison(&time_vec(base.into_iter()), &time_vec(compare.into_iter()));
+        }
+    }
+
+    Ok(())
+}
+
+fn time_vec<'a, B: BenchmarkParams>(
+    benches: impl Iterator<Item = &'a BenchRun<BenchTypeData<B>>>,
+) -> Vec<f64> {
+    benches
+        .map(|b| b.common.wall_time.as_secs_f64())
+        .collect_vec()
+}
+
+fn report_aggregate(times: &[f64]) {
     let mean = times.iter().mean();
     let stdev = times.iter().std_dev();
 
     println!(" Mean: {mean}");
     println!("StDev: {stdev}");
-    Ok(())
+}
+
+fn report_comparison(base: &[f64], compare: &[f64]) {
+    todo!()
 }

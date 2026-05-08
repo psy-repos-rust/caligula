@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::{collections::BTreeSet, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 
@@ -25,6 +25,11 @@ pub enum BenchSubcommands {
 pub struct ReportBenchArgs {
     /// Files to read from. If not provided, reads from stdin.
     pub result_files: Vec<PathBuf>,
+
+    /// Tags to consider as the "base" benchmark, or empty to not work in comparison
+    /// mode. Any runs not having this tag will be considered the "comparison."
+    #[arg(short, long, value_delimiter = ',')]
+    pub base: Vec<String>,
 }
 
 /// Run a benchmark. All benchmarks assume you have adequate permissions

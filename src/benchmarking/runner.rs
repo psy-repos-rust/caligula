@@ -61,7 +61,7 @@ where
             common: CommonData {
                 date_ran,
                 wall_time,
-                tags: runner_params.tags.clone()
+                tags: runner_params.tags.iter().cloned().collect()
             },
             r#type: AnyBenchType::from(BenchTypeData {
                 params: bench_params.clone(),

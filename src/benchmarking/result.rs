@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashSet, time::Duration};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -18,7 +18,7 @@ pub struct BenchRun<T> {
 pub struct CommonData {
     pub date_ran: DateTime<Utc>,
     pub wall_time: Duration,
-    pub tags: Vec<String>,
+    pub tags: HashSet<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, derive_more::From, derive_more::TryInto)]
