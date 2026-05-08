@@ -237,7 +237,6 @@ dependencies = [
  "bytes",
  "bytesize",
  "bzip2",
- "caligula",
  "cc",
  "chrono",
  "clap",

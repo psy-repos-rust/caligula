@@ -5,7 +5,6 @@ use tracing::debug;
 
 use crate::facade::make_real_facade;
 
-#[cfg(feature = "bench")]
 mod benchmarking;
 mod byteseries;
 mod compression;
@@ -38,7 +37,7 @@ pub struct Args {
 pub enum Command {
     Burn(ui::BurnArgs),
 
-    #[cfg(feature = "bench")]
+    #[command(hide = true)]
     Bench(benchmarking::BenchArgs),
 
     /// INTERNAL ONLY!
@@ -80,7 +79,6 @@ fn main() {
             logging::init_logging_child(args.log_file);
             herder_daemon::main();
         }
-        #[cfg(feature = "bench")]
         Command::Bench(args) => crate::benchmarking::main(args),
     }
 }

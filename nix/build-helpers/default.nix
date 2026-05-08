@@ -29,22 +29,15 @@
 
       # All caligulas that are buildable by this system.
       caligulaPackages = lib.listToAttrs (
-        (
-          lib.forEach supportedTargets (target: {
-            name = "caligula-${target}";
-            value = (perTarget target).caligula;
-          })
-          ++ (lib.forEach supportedTargets (target: {
-            name = "caligula-full-${target}";
-            value = (perTarget target).caligula-full;
-          }))
-        )
+        lib.forEach supportedTargets (target: {
+          name = "caligula-${target}";
+          value = (perTarget target).caligula;
+        })
       );
     in
     {
       packages = caligulaPackages // {
         caligula = self.packages.${system}."caligula-${system}";
-        caligula-full = self.packages.${system}."caligula-full-${system}";
         lint-script =
           with pkgs;
           writeShellApplication {

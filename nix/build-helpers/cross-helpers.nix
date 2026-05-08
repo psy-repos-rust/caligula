@@ -120,34 +120,16 @@ rec {
 
   buildInputs = buildCfg.platformDeps ++ [ crossParams.cc ];
 
-  naerskArgsBase = {
-    inherit src buildInputs;
-    propagatedBuildInputs = [ crossParams.cc ];
-    CARGO_BUILD_TARGET = buildCfg.rustTarget;
-    doCheck = system == target;
-  }
-  // crossParams.extraBuildEnv;
-
   # The actual package
   caligula = naersk'.buildPackage (
-    naerskArgsBase
-    // {
+    {
+      inherit src;
+      doCheck = system == target;
+      propagatedBuildInputs = [ crossParams.cc ];
+      inherit buildInputs;
       cargoBuildOptions = args: args ++ [ "--locked" ];
+      CARGO_BUILD_TARGET = buildCfg.rustTarget;
     }
-  );
-
-  # The variant with all features turned on
-  caligula-full = naersk'.buildPackage (
-    naerskArgsBase
-    // {
-      cargoBuildOptions =
-        args:
-        args
-        ++ [ "--locked" ]
-        ++ [
-          "--features"
-          "full"
-        ];
-    }
+    // crossParams.extraBuildEnv
   );
 }

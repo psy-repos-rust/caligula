@@ -4,11 +4,10 @@ use clap::{Parser, Subcommand};
 
 use crate::benchmarking::benches::BenchType;
 
-/// Caligula benchmarking subsystem.
-///
-/// This is meant to be a tool for Caligula developers, rather than end users!
 #[derive(Parser, Debug)]
-#[clap(long_help)]
+#[clap(
+    about = "Caligula benchmarking subsystem.\n\nWARNING: THESE COMMANDS ARE EXTREMELY DANGEROUS! THIS IS A SUBSYSTEM MEANT FOR CALIGULA DEVELOPERS, RATHER THAN END USERS! COMMAND STABILITY IS NOT GUARANTEED, AND IF YOU USE THIS, DO NOT EXPECT TO RECEIVE ANY HELP WHATSOEVER! YOU HAVE BEEN WARNED!"
+)]
 pub struct BenchArgs {
     #[command(subcommand)]
     pub command: BenchSubcommands,
@@ -32,8 +31,10 @@ pub struct ReportBenchArgs {
     pub base: Vec<String>,
 }
 
-/// Run a benchmark. All benchmarks assume you have adequate permissions
-/// to read and write the files you pass in. No auto-escalation is done.
+/// Run a benchmark.
+///
+/// All benchmarks assume you have adequate permissions to read and write the
+/// files you pass in. No auto-escalation is done.
 #[derive(Parser, Debug)]
 pub struct RunBenchArgs {
     /// Which benchmark to run.
