@@ -9,14 +9,19 @@ use crate::benchmarking::{
 };
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct BenchRun {
+pub struct BenchRun<T> {
+    pub common: CommonData,
+    pub r#type: T,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CommonData {
     pub date_ran: DateTime<Utc>,
     pub wall_time: Duration,
-    pub r#type: BenchRunType,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, derive_more::From, derive_more::TryInto)]
-pub enum BenchRunType {
+pub enum AnyBenchType {
     Hash(BenchTypeData<HashBenchParams>),
     Write(BenchTypeData<WriteBench>),
     Verify(BenchTypeData<VerifyBench>),

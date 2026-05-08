@@ -11,7 +11,7 @@ use chrono::Utc;
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::benchmarking::result::{BenchRun, BenchRunType, BenchTypeData};
+use crate::benchmarking::result::{AnyBenchType, BenchRun, BenchTypeData, CommonData};
 
 const REFRESH_PERIOD: Duration = Duration::from_millis(250);
 
@@ -36,7 +36,7 @@ pub struct BenchRunnerParams {
 
 pub fn run_benchmarks<B: BenchmarkParams>(bench_params: B, runner_params: BenchRunnerParams)
 where
-    BenchRunType: From<BenchTypeData<B>>,
+    AnyBenchType: From<BenchTypeData<B>>,
 {
     let mut output: Box<dyn Write> = match runner_params.output_file {
         Some(f) => Box::new(File::create(f).expect("Failed to open output for writing")),
@@ -54,9 +54,11 @@ where
         let (wall_time, result) = std::thread::scope(move |s| run_once(i, count, bench, ctxref, s));
 
         let run_result = BenchRun {
-            date_ran,
-            wall_time,
-            r#type: BenchRunType::from(BenchTypeData {
+            common: CommonData {
+                date_ran,
+                wall_time,
+            },
+            r#type: AnyBenchType::from(BenchTypeData {
                 params: bench_params.clone(),
                 result,
             }),
