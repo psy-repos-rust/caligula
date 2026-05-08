@@ -62,8 +62,6 @@ impl BenchmarkParams for WriteBench {
                 }
             })
             .expect("operation failed");
-
-            Box::new(|| ())
         })
     }
 }

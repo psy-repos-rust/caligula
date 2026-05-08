@@ -1,7 +1,6 @@
 use std::{
-    sync::atomic::{AtomicU64, Ordering},
-    thread::Scope,
-    time::{Duration, Instant},
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+    time::Duration,
 };
 
 use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
@@ -10,62 +9,38 @@ use serde::{Serialize, de::DeserializeOwned};
 const REFRESH_PERIOD: Duration = Duration::from_millis(250);
 
 pub fn run_benchmark<B: BenchmarkParams>(bench_params: B) {
-    let ctx = BenchContext::default();
-    let bench = bench_params.setup(&ctx);
+    let ctx = BenchContext {
+        progress: 0.into(),
+        denominator: 0.into(),
+        finished: false.into(),
+    };
+    let ctx = &ctx;
 
-    let ctxref = &ctx;
-    std::thread::scope(move |s| run_once(bench, ctxref, s));
-}
+    std::thread::scope(move |s| {
+        // set up the bench
+        let bench = bench_params.setup(ctx);
 
-fn run_once<'scope, 'env, R>(
-    b: Box<dyn Benchmark<Report = R>>,
-    ctx: &'scope BenchContext,
-    s: &'scope Scope<'scope, 'env>,
-) -> (Duration, R)
-where
-    R: Serialize + DeserializeOwned + Send + 'static,
-{
-    // spawn the thread
-    let handle = s.spawn(move || {
-        let start = Instant::now();
-        let report = b.run(ctx);
-        let elapsed = start.elapsed();
-        (elapsed, report())
+        // spawn progress bar thread
+        let jh = s.spawn(|| progress_bar_thread(ctx));
+
+        // run bench in this thread
+        bench.run(ctx);
+
+        // now that we're done, notify and wake up the progress bar thread so we finish
+        // asap
+        ctx.finished.store(true, Ordering::SeqCst);
+        jh.thread().unpark();
     });
-
-    // render a progress bar!
-    let len = 80;
-    let bar = ProgressBar::new(len)
-        .with_message("Benching")
-        .with_style(make_progress_style(false));
-    bar.set_draw_target(ProgressDrawTarget::stderr());
-
-    // omg so pretty
-    while !handle.is_finished() {
-        std::thread::sleep(REFRESH_PERIOD);
-        let denominator = ctx.denominator.load(Ordering::Relaxed);
-        let progress = ctx.progress.load(Ordering::Relaxed);
-        if denominator != 0 {
-            bar.set_position((progress as f64 * len as f64 / denominator as f64) as u64);
-        }
-    }
-
-    // set to 100% progress
-    bar.set_style(make_progress_style(true));
-    bar.set_position(len);
-    bar.finish_with_message("Done!");
-
-    // print the report
-    let (wall_time, report) = handle.join().unwrap();
-
-    (wall_time, report)
 }
 
-/// Interface available for benchmarks to log data to.
-#[derive(Default)]
+/// Interface for receiving data from benchmarks.
 pub struct BenchContext {
     progress: AtomicU64,
     denominator: AtomicU64,
+
+    /// Flag for whether or not this is finished. It's mainly used to signal
+    /// termination to the [`progress_bar_thread()`].
+    finished: AtomicBool,
 }
 
 impl BenchContext {
@@ -97,20 +72,46 @@ pub trait Benchmark: Send + 'static {
     type Report: Serialize + DeserializeOwned + Send + 'static;
 
     /// Execute the benchmark.
-    fn run(self: Box<Self>, ctx: &BenchContext) -> Box<dyn FnOnce() -> Self::Report>;
+    fn run(self: Box<Self>, ctx: &BenchContext) -> Self::Report;
 }
 
-impl<F, R, RF> Benchmark for F
+impl<F, R> Benchmark for F
 where
-    F: FnOnce(&BenchContext) -> RF + Send + 'static,
+    F: FnOnce(&BenchContext) -> R + Send + 'static,
     R: Serialize + DeserializeOwned + Send + 'static,
-    RF: FnOnce() -> R + 'static,
 {
     type Report = R;
 
-    fn run(self: Box<Self>, ctx: &BenchContext) -> Box<dyn FnOnce() -> Self::Report> {
-        Box::new((self)(ctx))
+    fn run(self: Box<Self>, ctx: &BenchContext) -> Self::Report {
+        self(ctx)
     }
+}
+
+/// renders a progress bar!
+fn progress_bar_thread(ctx: &BenchContext) {
+    // set it up
+    let len = 80;
+    let bar = ProgressBar::new(len)
+        .with_message("Benching")
+        .with_style(make_progress_style(false));
+    bar.set_draw_target(ProgressDrawTarget::stderr());
+
+    while !ctx.finished.load(Ordering::SeqCst) {
+        let denominator = ctx.denominator.load(Ordering::Relaxed);
+        let progress = ctx.progress.load(Ordering::Relaxed);
+        if denominator != 0 {
+            bar.set_position((progress as f64 * len as f64 / denominator as f64) as u64);
+        }
+
+        // use park timeout instead of sleep. this way we can wake me up inside
+        // as soon as the actual bench finishes.
+        std::thread::park_timeout(REFRESH_PERIOD);
+    }
+
+    // set to 100% progress
+    bar.set_style(make_progress_style(true));
+    bar.set_position(len);
+    bar.finish_with_message("Done!");
 }
 
 fn make_progress_style(is_done: bool) -> ProgressStyle {

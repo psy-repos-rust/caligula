@@ -62,8 +62,6 @@ impl BenchmarkParams for VerifyBench {
                 }
             })
             .expect("operation failed");
-
-            Box::new(|| ())
         })
     }
 }

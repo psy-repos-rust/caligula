@@ -41,7 +41,6 @@ impl BenchmarkParams for HashBenchParams {
                 ctx.log_progress(bs);
             })
             .unwrap();
-            Box::new(|| ())
         })
     }
 }
