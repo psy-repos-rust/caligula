@@ -1,8 +1,8 @@
+use std::{fmt::Display, io::Read};
+
 use base64::Engine;
 use digest::Digest;
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
-use std::io::Read;
 
 macro_rules! generate {
     {
@@ -273,7 +273,7 @@ pub fn parse_hash_input(h: &str) -> Result<(Vec<HashAlg>, Vec<u8>), HashParseErr
             return Err(HashParseError::AlgDetectionFailure(len));
         }
 
-        return Ok((alg.into(), bytes));
+        return Ok((alg, bytes));
     }
 
     Err(HashParseError::UnparseableInput)

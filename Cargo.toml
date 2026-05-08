@@ -10,7 +10,7 @@ license = "GPL-3.0"
 
 [features]
 default = []
-bench = [ "dep:serde_json", "dep:statrs", "chrono/serde"]
+bench = []
 
 [dependencies]
 aligned-vec = "0.5.0"
@@ -49,11 +49,9 @@ ratatui = { version = "0.26.3", default-features = false, features = [
 ] }
 ruzstd = { version = "0.6.0", default-features = false, features = ["std"] }
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.149", optional = true }
 sha1 = "0.10.6"
 sha2 = "0.10.9"
 shell-words = "1.1.0"
-statrs = { version = "0.18.0", optional = true }
 thiserror = "1.0.69"
 tokio = { version = "1.48.0", features = [
   "rt",
@@ -74,7 +72,7 @@ xz2 = { version = "0.1.7", features = ["static"] }
 [dev-dependencies]
 approx = "0.5.1"
 assert_matches = "1.5.0"
-caligula = { path = "." , features = ["bench"] }
+caligula = { path = ".", features = ["bench"] }
 pretty_assertions = "1.4.1"
 rand = { version = "0.8.5", features = ["small_rng"] }
 rstest = "0.19.0"

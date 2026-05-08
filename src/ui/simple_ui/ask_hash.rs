@@ -1,6 +1,7 @@
+use std::{fs::File, io::Seek, path::Path, process::exit};
+
 use indicatif::{ProgressBar, ProgressStyle};
 use inquire::{Confirm, Select, Text};
-use std::{fs::File, io::Seek, path::Path, process::exit};
 
 use crate::{
     compression::CompressionFormat,

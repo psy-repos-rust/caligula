@@ -1,8 +1,8 @@
-use std::{collections::BTreeSet, path::PathBuf};
+use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
-use crate::benchmarking::{benches::BenchType, runner::BenchRunnerParams};
+use crate::benchmarking::benches::BenchType;
 
 /// Caligula benchmarking subsystem.
 ///
@@ -17,7 +17,6 @@ pub struct BenchArgs {
 #[derive(Subcommand, Debug)]
 pub enum BenchSubcommands {
     Run(RunBenchArgs),
-    Report(ReportBenchArgs),
 }
 
 /// Generate a report from one or multiple benchmark runs.
@@ -26,8 +25,9 @@ pub struct ReportBenchArgs {
     /// Files to read from. If not provided, reads from stdin.
     pub result_files: Vec<PathBuf>,
 
-    /// Tags to consider as the "base" benchmark, or empty to not work in comparison
-    /// mode. Any runs not having this tag will be considered the "comparison."
+    /// Tags to consider as the "base" benchmark, or empty to not work in
+    /// comparison mode. Any runs not having this tag will be considered the
+    /// "comparison."
     #[arg(short, long, value_delimiter = ',')]
     pub base: Vec<String>,
 }
@@ -39,7 +39,4 @@ pub struct RunBenchArgs {
     /// Which benchmark to run.
     #[command(name = "type", subcommand)]
     pub type_: BenchType,
-
-    #[clap(flatten)]
-    pub runner_params: BenchRunnerParams,
 }

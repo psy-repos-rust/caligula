@@ -3,9 +3,8 @@ use pretty_assertions::assert_eq;
 use rand::{SeedableRng, rngs::SmallRng};
 use rstest::*;
 
-use crate::herder_api::write_verify::{LegacyWriteVerifyError, WriteVerifyEvent};
-
 use self::helpers::*;
+use crate::herder_api::write_verify::{LegacyWriteVerifyError, WriteVerifyEvent};
 
 #[test]
 fn write_op_works_with_emitted_events() {

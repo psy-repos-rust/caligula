@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     benchmarking::{BenchContext, Benchmark, runner::BenchmarkParams},
     compression::CompressionFormat,
+    herder_api::write_verify::WriteVerifyEvent,
     legacy_io::VerifyOp,
 };
 
@@ -55,11 +56,10 @@ impl BenchmarkParams for VerifyBench {
                 checkpoint_period: 32,
                 file_read_buf_size: this.file_read_buf_size,
             }
-            .execute(|e| match e {
-                crate::herder_api::write_verify::WriteVerifyEvent::TotalBytes { src, .. } => {
+            .execute(|e| {
+                if let WriteVerifyEvent::TotalBytes { src, .. } = e {
                     ctx.log_progress(src);
                 }
-                _ => (),
             })
             .expect("operation failed");
 

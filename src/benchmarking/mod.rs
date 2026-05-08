@@ -1,22 +1,21 @@
 mod benches;
 mod cli;
-mod report;
-mod result;
 mod runner;
 
-pub use self::cli::BenchArgs;
-pub use self::runner::{BenchContext, Benchmark};
 use cli::BenchSubcommands;
 
-use crate::benchmarking::runner::run_benchmarks;
+pub use self::{
+    cli::BenchArgs,
+    runner::{BenchContext, Benchmark},
+};
+use crate::benchmarking::runner::run_benchmark;
 
 pub fn main(args: BenchArgs) {
     match args.command {
         BenchSubcommands::Run(args) => match args.type_ {
-            benches::BenchType::Write(b) => run_benchmarks(b, args.runner_params),
-            benches::BenchType::Hash(b) => run_benchmarks(b, args.runner_params),
-            benches::BenchType::Verify(b) => run_benchmarks(b, args.runner_params),
+            benches::BenchType::Write(b) => run_benchmark(b),
+            benches::BenchType::Hash(b) => run_benchmark(b),
+            benches::BenchType::Verify(b) => run_benchmark(b),
         },
-        BenchSubcommands::Report(args) => self::report::main(args),
     }
 }
