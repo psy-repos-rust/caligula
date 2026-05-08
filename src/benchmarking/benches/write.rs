@@ -56,9 +56,8 @@ impl BenchmarkParams for WriteBench {
                 file_read_buf_size: this.file_read_buf_size,
             }
             .execute(|e| match e {
-                crate::herder_api::write_verify::WriteVerifyEvent::TotalBytes { src, dest } => {
-                    ctx.log_bytes_in(src);
-                    ctx.log_bytes_out(dest);
+                crate::herder_api::write_verify::WriteVerifyEvent::TotalBytes { src, .. } => {
+                    ctx.log_progress(src);
                 }
                 _ => (),
             })

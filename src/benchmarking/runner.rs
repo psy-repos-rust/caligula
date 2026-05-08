@@ -7,15 +7,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use bytesize::ByteSize;
 use chrono::Utc;
-use indicatif::{ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressDrawTarget, ProgressStyle};
 use serde::{Serialize, de::DeserializeOwned};
 
-use crate::{
-    benchmarking::result::{BenchRun, BenchRunType, BenchTypeData},
-    ui::ByteSpeed,
-};
+use crate::benchmarking::result::{BenchRun, BenchRunType, BenchTypeData};
 
 const REFRESH_PERIOD: Duration = Duration::from_millis(250);
 
@@ -106,36 +102,27 @@ where
     // render a progress bar!
     let len = 80;
     let bar = ProgressBar::new(len)
-        .with_message("Bench")
+        .with_message("Benching")
         .with_style(make_progress_style(i, total, false));
+    bar.set_draw_target(ProgressDrawTarget::stderr());
 
     // omg so pretty
     while !handle.is_finished() {
         std::thread::sleep(REFRESH_PERIOD);
         let denominator = ctx.denominator.load(Ordering::Relaxed);
         let progress = ctx.progress.load(Ordering::Relaxed);
-        bar.set_position((progress as f64 * len as f64 / denominator as f64) as u64);
+        if denominator != 0 {
+            bar.set_position((progress as f64 * len as f64 / denominator as f64) as u64);
+        }
     }
 
     // set to 100% progress
     bar.set_style(make_progress_style(i, total, true));
     bar.set_position(len);
+    bar.finish_with_message("Done!");
 
     // print the report
     let (wall_time, report) = handle.join().unwrap();
-    let bytes_in = ctx.bytes_in.load(Ordering::Relaxed);
-    let bytes_out = ctx.bytes_out.load(Ordering::Relaxed);
-    eprintln!("Time elapsed: {wall_time:?}");
-    eprintln!("Bytes in:     {}", ByteSize::b(bytes_in));
-    eprintln!("Bytes out:    {}", ByteSize::b(bytes_out));
-    eprintln!(
-        "Input rate:   {}",
-        ByteSpeed(bytes_in as f64 / wall_time.as_secs_f64())
-    );
-    eprintln!(
-        "Output rate:  {}",
-        ByteSpeed(bytes_out as f64 / wall_time.as_secs_f64())
-    );
 
     (wall_time, report)
 }
@@ -143,27 +130,20 @@ where
 /// Interface available for benchmarks to log data to.
 #[derive(Default)]
 pub struct BenchContext {
-    bytes_in: AtomicU64,
-    bytes_out: AtomicU64,
     progress: AtomicU64,
     denominator: AtomicU64,
 }
 
 impl BenchContext {
-    pub fn log_bytes_in(&self, bytes_in: u64) {
-        self.bytes_in.store(bytes_in, Ordering::Relaxed);
-    }
-
-    pub fn log_bytes_out(&self, bytes_out: u64) {
-        self.bytes_out.store(bytes_out, Ordering::Relaxed);
-    }
-
-    pub fn log_progress(&self, progress: u64) {
-        self.progress.store(progress, Ordering::Relaxed);
-    }
-
+    /// Set the denominator to use for progress tracking.
     pub fn set_progress_denominator(&self, denominator: u64) {
         self.denominator.store(denominator, Ordering::Relaxed);
+    }
+
+    /// Log progress. This can be any arbitrary unit, but in order for it to take effect,
+    /// [`Self::set_progress_denominator()`] must have been called with a non-zero value.
+    pub fn log_progress(&self, progress: u64) {
+        self.progress.store(progress, Ordering::Relaxed);
     }
 }
 
@@ -204,7 +184,7 @@ fn make_progress_style(i: u32, total: u32, is_done: bool) -> ProgressStyle {
     const IN_PROGRESS: &str = "[{elapsed_precise}] {wide_bar:.yellow} {percent:>3}%";
     const DONE: &str = "[{elapsed_precise}] {wide_bar:.green} {percent:>3}%";
 
-    let mut template = String::from("{msg} ");
+    let mut template = String::from("{msg:<8} ");
 
     // left pad
     let max_len = total.to_string().len();

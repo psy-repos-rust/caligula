@@ -56,8 +56,8 @@ impl BenchmarkParams for VerifyBench {
                 file_read_buf_size: this.file_read_buf_size,
             }
             .execute(|e| match e {
-                crate::herder_api::write_verify::WriteVerifyEvent::TotalBytes { src, dest } => {
-                    ctx.log_bytes_in(src + dest);
+                crate::herder_api::write_verify::WriteVerifyEvent::TotalBytes { src, .. } => {
+                    ctx.log_progress(src);
                 }
                 _ => (),
             })

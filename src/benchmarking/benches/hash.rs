@@ -38,11 +38,9 @@ impl BenchmarkParams for HashBenchParams {
 
         Box::new(move |ctx: &BenchContext| {
             do_file_hashing(file, this.compression, this.alg, |bs| {
-                ctx.log_bytes_in(bs);
                 ctx.log_progress(bs);
             })
             .unwrap();
-            ctx.log_bytes_in(size);
             Box::new(|| ())
         })
     }
