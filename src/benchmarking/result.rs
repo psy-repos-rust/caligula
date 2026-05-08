@@ -18,6 +18,7 @@ pub struct BenchRun<T> {
 pub struct CommonData {
     pub date_ran: DateTime<Utc>,
     pub wall_time: Duration,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, derive_more::From, derive_more::TryInto)]

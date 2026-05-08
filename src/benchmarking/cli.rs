@@ -23,10 +23,6 @@ pub enum BenchSubcommands {
 /// Generate a report from one or multiple benchmark runs.
 #[derive(Parser, Debug)]
 pub struct ReportBenchArgs {
-    /// File to write HTML report to. If not provided, writes to stdout.
-    #[arg(short, long)]
-    pub output_file: Option<PathBuf>,
-
     /// Files to read from. If not provided, reads from stdin.
     pub result_files: Vec<PathBuf>,
 }

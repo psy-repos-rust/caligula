@@ -1,10 +1,7 @@
-use std::{
-    fmt::Debug,
-    fs::File,
-    io::{Read, Write},
-};
+use std::{fmt::Debug, fs::File, io::Read};
 
 use itertools::Itertools as _;
+use statrs::statistics::Statistics;
 
 use crate::benchmarking::{
     benches::{HashBenchParams, VerifyBench, WriteBench},
@@ -27,18 +24,13 @@ pub fn main(args: ReportBenchArgs) {
             .expect("Failed to open inputs for reading"),
     };
 
-    let w: Box<dyn Write> = match args.output_file {
-        Some(f) => Box::new(File::create(f).expect("Failed to open output for writing")),
-        None => Box::new(std::io::stdout()),
-    };
-
     let mut benches = read_benches(rs).peekable();
     let first = benches.peek().expect("got empty list of benchmarks!");
 
     match first.r#type {
-        AnyBenchType::Hash(_) => write_report::<HashBenchParams>(w, downcast_benches(benches)),
-        AnyBenchType::Write(_) => write_report::<WriteBench>(w, downcast_benches(benches)),
-        AnyBenchType::Verify(_) => write_report::<VerifyBench>(w, downcast_benches(benches)),
+        AnyBenchType::Hash(_) => write_report::<HashBenchParams>(downcast_benches(benches)),
+        AnyBenchType::Write(_) => write_report::<WriteBench>(downcast_benches(benches)),
+        AnyBenchType::Verify(_) => write_report::<VerifyBench>(downcast_benches(benches)),
     }
     .expect("Failed to write report!");
 }
@@ -64,9 +56,18 @@ where
 }
 
 fn write_report<B: BenchmarkParams>(
-    w: impl Write,
     benches: impl IntoIterator<Item = BenchRun<BenchTypeData<B>>>,
 ) -> std::io::Result<()> {
     let benches = benches.into_iter().collect_vec();
-    todo!()
+    let times = benches
+        .iter()
+        .map(|b| b.common.wall_time.as_secs_f64())
+        .collect_vec();
+
+    let mean = times.iter().mean();
+    let stdev = times.iter().std_dev();
+
+    println!(" Mean: {mean}");
+    println!("StDev: {stdev}");
+    Ok(())
 }

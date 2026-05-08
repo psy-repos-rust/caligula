@@ -32,6 +32,10 @@ pub struct BenchRunnerParams {
     /// If provided, the JSON results will be formatted with pretty indentation.
     #[arg(long)]
     pub output_pretty: bool,
+
+    /// Comma-separated list of tags to add to the output.
+    #[arg(short, long, value_delimiter = ',')]
+    pub tags: Vec<String>,
 }
 
 pub fn run_benchmarks<B: BenchmarkParams>(bench_params: B, runner_params: BenchRunnerParams)
@@ -57,6 +61,7 @@ where
             common: CommonData {
                 date_ran,
                 wall_time,
+                tags: runner_params.tags.clone()
             },
             r#type: AnyBenchType::from(BenchTypeData {
                 params: bench_params.clone(),
