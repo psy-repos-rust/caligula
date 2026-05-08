@@ -4,7 +4,7 @@ use rand::{SeedableRng, rngs::SmallRng};
 use rstest::*;
 
 use self::helpers::*;
-use super::*;
+use crate::herder_api::write_verify::{LegacyWriteVerifyError, WriteVerifyEvent};
 
 #[test]
 fn write_op_works_with_emitted_events() {
@@ -77,6 +77,8 @@ fn write_misaligned_file_works(
 
 #[rstest]
 fn write_file_larger_than_disk(#[values(1032, 2000, 6000, 7000)] file_size: usize) {
+    use crate::herder_api::write_verify::LegacyWriteVerifyError;
+
     let test = WriteTest {
         file_size,
         buf_size: 512,
@@ -261,8 +263,11 @@ mod helpers {
 
     use rand::{Rng, SeedableRng, rngs::SmallRng};
 
-    use super::{CompressionFormat, VerifyOp, WriteOp};
-    use crate::herder_api::write_verify::*;
+    use crate::{
+        compression::CompressionFormat,
+        herder_api::write_verify::*,
+        legacy_io::{VerifyOp, WriteOp},
+    };
 
     /// Wraps an in-memory buffer and logs every single chunk of data written to
     /// it.

@@ -5,26 +5,50 @@ use digest::Digest;
 use serde::{Deserialize, Serialize};
 
 macro_rules! generate {
-    {$(
-        hash_length: $digest_bytes:expr => [
-            $($enum_arm:ident {
-                name: $sri_prefix:literal,
-                display: $display:expr,
-                new() -> $hash_inner:ty {
-                    $makehash_expr:expr
-                }
-            })*
-        ]
-    )*} => {
+    {
+        $($enum_arm:ident($hash_inner:ty) {
+            name: $sri_prefix:literal,
+            display: $display:expr,
+        })*
+    } => {
         /// A hashing algorithm supported by Caligula.
         ///
         /// [`Ord`] is implemented in order by security. Lower-security algorithms are
         /// less than higher-security algorithms.
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+        #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
         pub enum HashAlg {
-            $($(
-                $enum_arm,
-            )*)*
+            $($enum_arm,)*
+        }
+
+        impl HashAlg {
+            /// Parses from SRI algorithm prefix. See https://www.w3.org/TR/SRI/ for more information.
+            /// Note that although SRI only supports sha256, sha384, and sha512, we parse out
+            /// more than that, so it's not actually to spec, but who cares.
+            pub fn from_sri_alg(alg: &str) -> Option<Self> {
+                match alg {
+                    $($sri_prefix => Some(Self::$enum_arm),)*
+                    _ => None,
+                }
+            }
+
+            /// Returns the digest size in bytes.
+            pub fn digest_bytes(&self) -> usize {
+                match self {
+                    $(Self::$enum_arm => <$hash_inner as Digest>::output_size(),)*
+                }
+            }
+
+            pub fn values() -> &'static [Self] {
+                &[$(Self::$enum_arm,)*]
+            }
+        }
+
+        impl Display for HashAlg {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    $(Self::$enum_arm => write!(f, $display),)*
+                }
+            }
         }
 
         /// Represents a hashing operation in progress.
@@ -40,57 +64,7 @@ macro_rules! generate {
         where
             R : Read,
         {
-            $($(
-                $enum_arm(GenericHashing<$hash_inner, R>),
-            )*)*
-        }
-
-        impl HashAlg {
-            /// Parses from SRI algorithm prefix. See https://www.w3.org/TR/SRI/ for more information.
-            /// Note that although SRI only supports sha256, sha384, and sha512, we parse out
-            /// more than that, so it's not actually to spec, but who cares.
-            pub fn from_sri_alg(alg: &str) -> Option<Self> {
-                match alg {
-                    $($(
-                        $sri_prefix => Some(Self::$enum_arm),
-                    )*)*
-                    _ => None,
-                }
-            }
-
-            /// Based on length of a hash, detects the possible hash algs
-            /// this hash could be from.
-            pub fn detect_from_length(bytes: usize) -> &'static [Self] {
-                match bytes {
-                    $(
-                        $digest_bytes => &[
-                            $(
-                                Self::$enum_arm,
-                            )*
-                        ],
-                    )*
-                    _ => &[],
-                }
-            }
-
-            /// Returns the digest size in bits.
-            pub fn digest_bytes(&self) -> usize {
-                match self {
-                    $($(
-                        Self::$enum_arm => $digest_bytes,
-                    )*)*
-                }
-            }
-        }
-
-        impl Display for HashAlg {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
-                    $($(
-                        Self::$enum_arm => write!(f, $display),
-                    )*)*
-                }
-            }
+            $($enum_arm(GenericHashing<$hash_inner, R>),)*
         }
 
         impl<R> Hashing<R>
@@ -100,11 +74,9 @@ macro_rules! generate {
             #[inline]
             pub fn new(alg: HashAlg, r: R, block_size: usize) -> Self {
                 let inner = match alg {
-                    $($(
-                        HashAlg::$enum_arm => HashingInner::$enum_arm(
-                            GenericHashing::new($makehash_expr, r, block_size)
-                        ),
-                    )*)*
+                    $(HashAlg::$enum_arm => HashingInner::$enum_arm(
+                        GenericHashing::new(<$hash_inner as Digest>::new(), r, block_size)
+                    ),)*
                 };
 
                 Self { inner }
@@ -113,18 +85,14 @@ macro_rules! generate {
             #[inline]
             pub fn finalize(self) -> std::io::Result<FileHashInfo> {
                 match self.inner {
-                    $($(
-                        HashingInner::$enum_arm(i) => i.finalize(),
-                    )*)*
+                    $(HashingInner::$enum_arm(i) => i.finalize(),)*
                 }
             }
 
             #[inline]
             pub fn get_reader_mut(&mut self) -> &mut R {
                 match &mut self.inner {
-                    $($(
-                        HashingInner::$enum_arm(i) => i.get_reader_mut(),
-                    )*)*
+                    $(HashingInner::$enum_arm(i) => i.get_reader_mut(),)*
                 }
             }
         }
@@ -138,70 +106,50 @@ macro_rules! generate {
             #[inline]
             fn next(&mut self) -> Option<Self::Item> {
                 match &mut self.inner {
-                    $($(
-                        HashingInner::$enum_arm(i) => i.next(),
-                    )*)*
+                    $(HashingInner::$enum_arm(i) => i.next(),)*
                 }
             }
         }
     }
 }
 
+impl HashAlg {
+    /// Based on length of a hash, detects the possible hash algs
+    /// this hash could be from.
+    pub fn detect_from_length(bytes: usize) -> Vec<Self> {
+        Self::values()
+            .iter()
+            .copied()
+            .filter(|alg| alg.digest_bytes() == bytes)
+            .collect()
+    }
+}
+
 generate! {
-    hash_length: 16 => [
-        Md5 {
-            name: "md5",
-            display: "MD5",
-            new() -> md5::Md5 {
-                md5::Md5::new()
-            }
-        }
-    ]
-    hash_length: 20 => [
-        Sha1 {
-            name: "sha1",
-            display: "SHA-1",
-            new() -> sha1::Sha1 {
-                sha1::Sha1::new()
-            }
-        }
-    ]
-    hash_length: 28 => [
-        Sha224 {
-            name: "sha224",
-            display: "SHA-224",
-            new() -> sha2::Sha224 {
-                sha2::Sha224::new()
-            }
-        }
-    ]
-    hash_length: 32 => [
-        Sha256 {
-            name: "sha256",
-            display: "SHA-256",
-            new() -> sha2::Sha256 {
-                sha2::Sha256::new()
-            }
-        }
-    ]
-    hash_length: 48 => [
-        Sha384 {
-            name: "sha384",
-            display: "SHA-384",
-            new() -> sha2::Sha384 {
-                sha2::Sha384::new()
-            }
-        }
-    ]
-    hash_length: 64 => [
-        Sha512 {
-            name: "sha512",
-            display: "SHA-512",
-            new() -> sha2::Sha512 {
-                sha2::Sha512::new()
-            }
-        }
-    ]
+    Md5(::md5::Md5) {
+        name: "md5",
+        display: "MD5",
+    }
+    Sha1(::sha1::Sha1) {
+        name: "sha1",
+        display: "SHA-1",
+    }
+    Sha224(::sha2::Sha224) {
+        name: "sha224",
+        display: "SHA-224",
+    }
+    Sha256(::sha2::Sha256) {
+        name: "sha256",
+        display: "SHA-256",
+    }
+    Sha384(::sha2::Sha384) {
+        name: "sha384",
+        display: "SHA-384",
+    }
+    Sha512(::sha2::Sha512) {
+        name: "sha512",
+        display: "SHA-512",
+    }
 }
 
 /// Represents a hashing operation in progress.
@@ -216,11 +164,6 @@ where
     len: usize,
     buf: Vec<u8>,
     error: Option<std::io::Error>,
-}
-
-/// Represents the full results of hashing.
-pub struct FileHashInfo {
-    pub file_hash: Vec<u8>,
 }
 
 impl<H, R> GenericHashing<H, R>
@@ -286,6 +229,12 @@ where
     }
 }
 
+/// Represents the full results of hashing.
+#[derive(Debug)]
+pub struct FileHashInfo {
+    pub file_hash: Vec<u8>,
+}
+
 pub fn parse_base16_or_base64(s: &str) -> Option<Vec<u8>> {
     base16::decode(s)
         .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(s))
@@ -324,7 +273,7 @@ pub fn parse_hash_input(h: &str) -> Result<(Vec<HashAlg>, Vec<u8>), HashParseErr
             return Err(HashParseError::AlgDetectionFailure(len));
         }
 
-        return Ok((alg.into(), bytes));
+        return Ok((alg, bytes));
     }
 
     Err(HashParseError::UnparseableInput)

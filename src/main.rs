@@ -5,6 +5,7 @@ use tracing::debug;
 
 use crate::facade::make_real_facade;
 
+mod benchmarking;
 mod byteseries;
 mod compression;
 mod device;
@@ -15,6 +16,7 @@ mod hashfile;
 mod herder_api;
 mod herder_daemon;
 mod ipc_common;
+mod legacy_io;
 mod logging;
 mod native;
 mod runtime;
@@ -34,6 +36,9 @@ pub struct Args {
 #[derive(clap::Subcommand, Debug)]
 pub enum Command {
     Burn(ui::BurnArgs),
+
+    #[command(hide = true)]
+    Bench(benchmarking::BenchArgs),
 
     /// INTERNAL ONLY!
     ///
@@ -74,6 +79,7 @@ fn main() {
             logging::init_logging_child(args.log_file);
             herder_daemon::main();
         }
+        Command::Bench(args) => crate::benchmarking::main(args),
     }
 }
 

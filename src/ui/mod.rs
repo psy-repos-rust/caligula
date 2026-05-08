@@ -1,4 +1,4 @@
-mod cli;
+pub mod cli;
 mod fancy_ui;
 mod simple_ui;
 mod utils;

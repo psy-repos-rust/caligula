@@ -46,7 +46,7 @@ macro_rules! generate {
             }
         }
 
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+        #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
         pub enum CompressionFormat {
             Identity,
             $(
