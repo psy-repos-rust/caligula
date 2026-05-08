@@ -69,6 +69,7 @@
                 ++ (with pkgs; [
                   coreutils
                   gzip
+                  hyperfine
                   lz4
                   nixfmt
                   python3
