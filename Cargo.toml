@@ -78,6 +78,11 @@ opt-level = 2
 lto = true
 codegen-units = 1
 
+# flags for setting up split debug info
+split-debuginfo = "packed"
+strip = "debuginfo"
+debug = true
+
 [target.aarch64-apple-darwin.dependencies]
 libc = "0.2.177"
 
