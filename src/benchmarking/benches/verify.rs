@@ -4,7 +4,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    benchmarking::{BenchContext, Benchmark},
+    benchmarking::{BenchContext, Benchmark, runner::BenchmarkParams},
     compression::CompressionFormat,
     legacy_io::VerifyOp,
 };
@@ -35,27 +35,31 @@ pub struct VerifyBench {
     pub disk_block_size: usize,
 }
 
-impl Benchmark for VerifyBench {
-    fn run(self: Self, ctx: &BenchContext) {
-        VerifyOp {
-            file: File::open(self.image).expect("failed to open image"),
-            disk: File::open(self.disk).expect("failed to open disk"),
-            cf: self.compression,
-            buf_size: self.disk_read_buf_size,
-            disk_block_size: self.disk_block_size,
-            checkpoint_period: 32,
-            file_read_buf_size: self.file_read_buf_size,
-        }
-        .execute(|e| match e {
-            crate::herder_api::write_verify::WriteVerifyEvent::TotalBytes { src, dest } => {
-                ctx.log_bytes_in(src + dest);
-            }
-            _ => (),
-        })
-        .expect("operation failed");
-    }
+impl BenchmarkParams for VerifyBench {
+    fn setup(&self, ctx: &BenchContext) -> Box<dyn Benchmark> {
+        let this = self.clone();
 
-    fn progress_denominator(&self) -> u64 {
-        std::fs::metadata(&self.image).unwrap().len()
+        let file = File::open(&this.image).expect("failed to open image");
+        let disk = File::open(&this.disk).expect("failed to open disk");
+        ctx.set_progress_denominator(file.metadata().unwrap().len());
+
+        Box::new(move |ctx: &BenchContext| {
+            VerifyOp {
+                file,
+                disk,
+                cf: this.compression,
+                buf_size: this.disk_read_buf_size,
+                disk_block_size: this.disk_block_size,
+                checkpoint_period: 32,
+                file_read_buf_size: this.file_read_buf_size,
+            }
+            .execute(|e| match e {
+                crate::herder_api::write_verify::WriteVerifyEvent::TotalBytes { src, dest } => {
+                    ctx.log_bytes_in(src + dest);
+                }
+                _ => (),
+            })
+            .expect("operation failed");
+        })
     }
 }

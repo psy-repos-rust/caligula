@@ -4,7 +4,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    benchmarking::{BenchContext, Benchmark},
+    benchmarking::{BenchContext, Benchmark, runner::BenchmarkParams},
     compression::CompressionFormat,
     hash::HashAlg,
     legacy_io::do_file_hashing,
@@ -12,7 +12,7 @@ use crate::{
 
 /// File read and hash calculation benchmark.
 #[derive(Parser, Debug, Serialize, Deserialize, Clone)]
-pub struct HashBench {
+pub struct HashBenchParams {
     /// Input image to hash.
     #[arg(display_order = 0)]
     pub input: PathBuf,
@@ -26,23 +26,21 @@ pub struct HashBench {
     pub compression: CompressionFormat,
 }
 
-impl Benchmark for HashBench {
-    fn run(self: Self, ctx: &BenchContext) {
-        let size = self.progress_denominator();
-        do_file_hashing(
-            File::open(self.input).unwrap(),
-            self.compression,
-            self.alg,
-            |bs| {
+impl BenchmarkParams for HashBenchParams {
+    fn setup(&self, ctx: &BenchContext) -> Box<dyn Benchmark> {
+        let this = self.clone();
+
+        let file = File::open(&this.input).unwrap();
+        let size = file.metadata().unwrap().len();
+        ctx.set_progress_denominator(size);
+
+        Box::new(move |ctx: &BenchContext| {
+            do_file_hashing(file, this.compression, this.alg, |bs| {
                 ctx.log_bytes_in(bs);
                 ctx.log_progress(bs);
-            },
-        )
-        .unwrap();
-        ctx.log_bytes_in(size);
-    }
-
-    fn progress_denominator(&self) -> u64 {
-        std::fs::metadata(&self.input).unwrap().len()
+            })
+            .unwrap();
+            ctx.log_bytes_in(size);
+        })
     }
 }

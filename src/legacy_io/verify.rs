@@ -2,8 +2,11 @@ use std::io::Read;
 
 use aligned_vec::avec_rt;
 
-use crate::{compression::CompressionFormat, herder_api::write_verify::{LegacyWriteVerifyError, WriteVerifyEvent}, legacy_io::utils::{CountRead, FileSourceReader, try_read_exact}};
-
+use crate::{
+    compression::CompressionFormat,
+    herder_api::write_verify::{LegacyWriteVerifyError, WriteVerifyEvent},
+    legacy_io::utils::{CountRead, FileSourceReader, try_read_exact},
+};
 
 /// Wraps a bunch of parameters for a big complicated operation where we:
 ///
@@ -28,7 +31,7 @@ pub struct VerifyOp<S: Read, D: Read> {
     pub file_read_buf_size: usize,
 }
 
- impl<S: Read, D: Read> VerifyOp<S, D> {
+impl<S: Read, D: Read> VerifyOp<S, D> {
     #[inline(always)]
     pub fn execute(
         &mut self,

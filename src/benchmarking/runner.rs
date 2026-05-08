@@ -28,16 +28,19 @@ pub struct BenchRunnerParams {
     pub output_file: Option<PathBuf>,
 }
 
-pub fn run_benchmarks(b: impl Benchmark, params: BenchRunnerParams) {
+pub fn run_benchmarks(b: impl BenchmarkParams, params: BenchRunnerParams) {
     let cooldown = Duration::from_secs(params.cooldown_secs.into());
     for i in 1..=params.count {
         let ctx = BenchContext::default();
+        let b = b.setup(&ctx);
 
-        std::thread::scope(|s| {
-            run_once(i, params.count, b.clone(), &ctx, s);
+        let count = params.count;
+        let ctxref = &ctx;
+        std::thread::scope(move |s| {
+            run_once(i, count, b, ctxref, s);
         });
 
-        if !cooldown.is_zero() && i != params.count {
+        if !cooldown.is_zero() && i != count {
             eprintln!("Pausing for {cooldown:?}");
             std::thread::sleep(cooldown);
         }
@@ -47,14 +50,11 @@ pub fn run_benchmarks(b: impl Benchmark, params: BenchRunnerParams) {
 fn run_once<'scope, 'env>(
     i: u32,
     total: u32,
-    b: impl Benchmark,
+    b: Box<dyn Benchmark>,
     ctx: &'scope BenchContext,
     s: &'scope Scope<'scope, 'env>,
 ) {
-    let denominator = b.progress_denominator();
-
     // spawn the thread
-    let b = b.clone();
     let handle = s.spawn(move || {
         let start = Instant::now();
         b.run(ctx);
@@ -70,6 +70,7 @@ fn run_once<'scope, 'env>(
     // omg so pretty
     while !handle.is_finished() {
         std::thread::sleep(REFRESH_PERIOD);
+        let denominator = ctx.denominator.load(Ordering::Relaxed);
         let progress = ctx.progress.load(Ordering::Relaxed);
         bar.set_position((progress as f64 * len as f64 / denominator as f64) as u64);
     }
@@ -95,11 +96,13 @@ fn run_once<'scope, 'env>(
     );
 }
 
+/// Interface available for benchmarks to log data to.
 #[derive(Default)]
 pub struct BenchContext {
     bytes_in: AtomicU64,
     bytes_out: AtomicU64,
     progress: AtomicU64,
+    denominator: AtomicU64,
 }
 
 impl BenchContext {
@@ -114,11 +117,31 @@ impl BenchContext {
     pub fn log_progress(&self, progress: u64) {
         self.progress.store(progress, Ordering::Relaxed);
     }
+
+    pub fn set_progress_denominator(&self, denominator: u64) {
+        self.denominator.store(denominator, Ordering::Relaxed);
+    }
 }
 
-pub trait Benchmark: Clone + Sized + Send + Serialize + DeserializeOwned + 'static {
-    fn progress_denominator(&self) -> u64;
-    fn run(self: Self, ctx: &BenchContext);
+/// Canned arguments for creating benchmarks.
+pub trait BenchmarkParams: Sync + Serialize + DeserializeOwned + 'static {
+    /// Prepare a benchmark to be executed.
+    fn setup(&self, ctx: &BenchContext) -> Box<dyn Benchmark>;
+}
+
+/// A benchmark that has been fully set up, and is ready to be executed.
+pub trait Benchmark: Send + 'static {
+    /// Execute the benchmark.
+    fn run(self: Box<Self>, ctx: &BenchContext);
+}
+
+impl<F> Benchmark for F
+where
+    F: FnOnce(&BenchContext) + Send + 'static,
+{
+    fn run(self: Box<Self>, ctx: &BenchContext) {
+        (self)(ctx)
+    }
 }
 
 fn make_progress_style(i: u32, total: u32, is_done: bool) -> ProgressStyle {

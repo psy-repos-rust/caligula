@@ -14,10 +14,12 @@ use std::{
 use tracing::{debug, info};
 use tracing_unwrap::ResultExt;
 
-use self::{
-    xplat::open_blockdev,
+use self::xplat::open_blockdev;
+use crate::{
+    device,
+    herder_api::write_verify::*,
+    legacy_io::{SyncDataFile, VerifyOp, WriteOp},
 };
-use crate::{ device, herder_api::write_verify::*, legacy_io::{SyncDataFile, VerifyOp, WriteOp}};
 
 mod xplat;
 
