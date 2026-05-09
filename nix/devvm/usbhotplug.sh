@@ -11,15 +11,32 @@ validate_variable() {
 print_help() {
     echo "Caligula DevVM USB hotplugger"
     echo "Usage:"
-    printf "\t%s add <name> <size>\n" "$0"
+    printf "\t%s add [--ro] <name> <size>\n" "$0"
     printf "\t%s rm <name>\n" "$0"
 }
 
 to_qemu() {
-    nc -NU /tmp/caligula-devvm-monitor.sock
+    nc -NU ./devvm.sock
 }
 
 add_usb() {
+    extra_flags=""
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --ro)
+                extra_flags="$extra_flags,readonly=on"
+                shift
+                ;;
+            -*|--*)
+                echo "Unknown option $1"
+                exit 1
+                ;;
+            *)
+                break
+            ;;
+        esac
+    done
+
     validate_variable "name" "${1:-}"
     validate_variable "size" "${2:-}"
 
@@ -30,7 +47,7 @@ add_usb() {
     set -euxo pipefail
 
     truncate -s "$size" "$file"
-    echo "drive_add 0 if=none,id=drive-$name,format=raw,file=$file" | to_qemu
+    echo "drive_add 0 if=none,id=drive-$name,format=raw,file=$file$extra_flags" | to_qemu
     echo "device_add usb-storage,bus=xhci.0,drive=drive-$name,removable=on,id=device-$name" | to_qemu
 }
 

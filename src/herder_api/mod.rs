@@ -4,6 +4,7 @@
 //! The UI may speak some of these types, but it should prefer to use the
 //! higher-level interfaces defined in [`crate::facade`].
 
+pub mod error;
 pub mod write_verify;
 
 use std::fmt::{Debug, Display};
