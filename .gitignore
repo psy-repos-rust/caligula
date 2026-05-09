@@ -1,6 +1,7 @@
 .direnv
 *.json
 *.jsonl
+pid
 
 .idea/
 
