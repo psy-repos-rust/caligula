@@ -123,12 +123,34 @@ rec {
   # The actual package
   caligula = naersk'.buildPackage (
     {
-      inherit src;
-      doCheck = system == target;
-      propagatedBuildInputs = [ crossParams.cc ];
-      inherit buildInputs;
-      cargoBuildOptions = args: args ++ [ "--locked" ];
+      inherit src buildInputs;
+
       CARGO_BUILD_TARGET = buildCfg.rustTarget;
+
+      doCheck = system == target; # only run tests on same system
+      propagatedBuildInputs = [ crossParams.cc ];
+      cargoBuildOptions = args: args ++ [ "--locked" ]; # prevent lock file from updating in build
+
+      copyBins = true;
+
+      # this part needed in order to copy the debug symbols to output
+      copyLibs = true;
+      copyLibsFilter = ''
+        select(
+          # same as the binary copy bit
+          .reason == "compiler-artifact"
+          and .executable != null
+          and .filenames != null
+          and .profile.test == false
+        ) |
+        # but we hack it into only looking at debug symbols
+        .filenames = [
+          .filenames[] | select(
+            endswith(".dwp")
+            or endswith(".dSYM")
+            or endswith(".pdb")
+          )
+        ]'';
     }
     // crossParams.extraBuildEnv
   );

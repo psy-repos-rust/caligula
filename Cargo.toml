@@ -48,6 +48,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 sha1 = "0.10.6"
 sha2 = "0.10.9"
 shell-words = "1.1.0"
+sysctl = "0.7.1"
 thiserror = "1.0.69"
 tokio = { version = "1.48.0", features = [
   "rt",
@@ -62,6 +63,7 @@ tracing = { version = "0.1.41", default-features = false, features = ["std"] }
 tracing-panic = "0.1.2"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 tracing-unwrap = "1.0.1"
+uname = "0.1.1"
 which = "6.0.3"
 xz2 = { version = "0.1.7", features = ["static"] }
 
@@ -77,6 +79,11 @@ test-case = "3.3.1"
 opt-level = 2
 lto = true
 codegen-units = 1
+
+# flags for setting up split debug info
+split-debuginfo = "packed"
+strip = "debuginfo"
+debug = true
 
 [target.aarch64-apple-darwin.dependencies]
 libc = "0.2.177"
