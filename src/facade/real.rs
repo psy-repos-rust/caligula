@@ -96,7 +96,8 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyWorkflow> for Fac
 impl<H: LegacyFacade + Send + 'static> Orchestrator<HashWorkflow> for FacadeImpl<H> {
     async fn start_workflow(&self, _workflow: HashWorkflow) -> Watch<HashingState> {
         unimplemented!(
-            "Until this is implemented, for testing purposes, you may replace this with test values."
+            "Until this is implemented, for testing purposes, you may replace this with test \
+             values."
         )
     }
 }
@@ -122,7 +123,8 @@ impl<H: LegacyFacade> Escalator for FacadeImpl<H> {
 impl<H> DiskWatcher for FacadeImpl<H> {
     fn watch_disks(&self) -> Watch<DiskList> {
         unimplemented!(
-            "Until this is implemented, for testing purposes, you may replace this with test values."
+            "Until this is implemented, for testing purposes, you may replace this with test \
+             values."
         )
     }
 }
@@ -130,7 +132,8 @@ impl<H> DiskWatcher for FacadeImpl<H> {
 impl<H> FileAnalyzer for FacadeImpl<H> {
     async fn analyze_file(&self, _input: PathBuf) -> std::io::Result<FileAnalysis> {
         unimplemented!(
-            "Until this is implemented, for testing purposes, you may replace this with test values."
+            "Until this is implemented, for testing purposes, you may replace this with test \
+             values."
         )
     }
 }

@@ -32,8 +32,8 @@ impl LogPaths {
 
     pub fn get_bug_report_msg(&self) -> String {
         format!(
-            "Please report bugs to https://github.com/ifd3f/caligula/issues and attach the \
-        log files in {}",
+            "Please report bugs to https://github.com/ifd3f/caligula/issues and attach the log \
+             files in {}",
             self.log_path
         )
     }

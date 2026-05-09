@@ -129,9 +129,11 @@ mod tests {
 
     #[test]
     fn parse_simple_hashfile() {
-        let mut cursor = Cursor::new(
-            "bceb3dded8935c1d3521c475a69ae557e082839b46d921c8b400524470b5c965  archlinux-2024.11.01-x86_64.iso",
-        );
+        #[rustfmt::skip]
+        const INPUT: &str =
+            "bceb3dded8935c1d3521c475a69ae557e082839b46d921c8b400524470b5c965 archlinux-2024.11.01-x86_64.iso";
+
+        let mut cursor = Cursor::new(INPUT);
 
         assert_eq!(
             parse_hashfile(&mut cursor, "archlinux-2024.11.01-x86_64.iso").unwrap(),
@@ -144,12 +146,14 @@ mod tests {
 
     #[test]
     fn parse_complicated_hashfile() {
-        let mut cursor = Cursor::new(
-            "bceb3dded8935c1d3521c475a69ae557e082839b46d921c8b400524470b5c965  archlinux-2024.11.01-x86_64.iso\n\
-        bceb3dded8935c1d3521c475a69ae557e082839b46d921c8b400524470b5c965  archlinux-x86_64.iso\n\
-        c64745475da03a31f270b92e9abfbe7b6315596c7c97b17ef9a373433562a4a4  archlinux-bootstrap-2024.11.01-x86_64.tar.zst\n\
-        c64745475da03a31f270b92e9abfbe7b6315596c7c97b17ef9a373433562a4a4  archlinux-bootstrap-x86_64.tar.zst",
-        );
+        #[rustfmt::skip]
+        const INPUT: &str =
+            "bceb3dded8935c1d3521c475a69ae557e082839b46d921c8b400524470b5c965  archlinux-2024.11.01-x86_64.iso
+bceb3dded8935c1d3521c475a69ae557e082839b46d921c8b400524470b5c965  archlinux-x86_64.iso
+c64745475da03a31f270b92e9abfbe7b6315596c7c97b17ef9a373433562a4a4  archlinux-bootstrap-2024.11.01-x86_64.tar.zst
+c64745475da03a31f270b92e9abfbe7b6315596c7c97b17ef9a373433562a4a4  archlinux-bootstrap-x86_64.tar.zst";
+
+        let mut cursor = Cursor::new(INPUT);
 
         for (filename, hash) in &[
             (

@@ -286,7 +286,8 @@ pub enum HashParseError {
     #[error("SRI-style value is not base16 or base64")]
     SRIValueNotBase16OrBase64,
     #[error(
-        "Algorithm {alg} expected a digest of length {expected_bytes}, but got length {actual_bytes}"
+        "Algorithm {alg} expected a digest of length {expected_bytes}, but got length \
+         {actual_bytes}"
     )]
     InvalidLengthForAlg {
         alg: HashAlg,
