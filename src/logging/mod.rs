@@ -10,7 +10,7 @@ use std::{
 };
 
 use crossterm::{style::Stylize, terminal::disable_raw_mode};
-use tracing::{Level, info};
+use tracing::{Level, info, warn};
 use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
 
 use crate::logging::coredump::CoredumpInstructions;
@@ -64,6 +64,8 @@ pub fn init_logging_parent(paths: &LogPaths) {
     init_tracing_subscriber(file);
 
     log_program_info();
+    log_uname();
+    log_info_files();
     log_environment_variables();
 
     let core_dump_msg = self::coredump::instructions();
@@ -165,6 +167,35 @@ fn log_program_info() {
     let name = env!("CARGO_PKG_NAME");
     let version = env!("CARGO_PKG_VERSION");
     tracing::info!("Starting {name} v{version}");
+}
+
+pub fn log_uname() {
+    let Ok(uname) = uname::uname().inspect_err(|e| warn!("Unable to get uname info: {e}")) else {
+        return;
+    };
+    info!(?uname.sysname, ?uname.version, ?uname.release, ?uname.machine, "uname info");
+}
+
+/// Log the contents of some files containing useful debug info about the user's system
+fn log_info_files() {
+    const INFO_FILES: &[&str] = &[
+        "/etc/os-release",
+        "/etc/lsb-release",
+        "/etc/redhat_release",
+        "/etc/debian_version",
+        "/System/Library/CoreServices/SystemVersion.plist",
+        "/sys/class/dmi/id/product_name",
+    ];
+
+    for path in INFO_FILES {
+        match std::fs::read_to_string(path) {
+            Ok(contents) => info!("{path} contents:\n{}", contents.trim()),
+            Err(e) => match e.kind() {
+                std::io::ErrorKind::NotFound => info!("{path} not found, skipping"),
+                _ => warn!("Failed to read {path}: {e}"),
+            },
+        }
+    }
 }
 
 fn log_environment_variables() {

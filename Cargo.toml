@@ -63,6 +63,7 @@ tracing = { version = "0.1.41", default-features = false, features = ["std"] }
 tracing-panic = "0.1.2"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "fmt"] }
 tracing-unwrap = "1.0.1"
+uname = "0.1.1"
 which = "6.0.3"
 xz2 = { version = "0.1.7", features = ["static"] }
 
