@@ -9,7 +9,8 @@ pub fn instructions() -> CoredumpInstructions {
     CoredumpInstructions::CouldNotDetermine
 }
 
-#[derive(Debug, derive_more::Display, derive_more::From, PartialEq, Eq, Clone)]
+#[derive(Debug, derive_more::Display, PartialEq, Eq, Clone)]
+#[cfg_attr(target_os = "linux", derive(derive_more::From))]
 pub enum CoredumpInstructions {
     #[display(
         fmt = "Unfortunately, we could not determine how you retrieve coredumps on your system, \
