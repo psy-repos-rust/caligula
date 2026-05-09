@@ -1,6 +1,7 @@
 mod coredump;
 
 use std::{
+    collections::BTreeMap,
     fs::File,
     io::Write,
     panic::{PanicHookInfo, set_hook},
@@ -61,6 +62,9 @@ pub fn init_logging_parent(paths: &LogPaths) {
     let file = File::create(&log_path).expect("Failed to create log file!");
 
     init_tracing_subscriber(file);
+
+    log_program_info();
+    log_environment_variables();
 
     let core_dump_msg = self::coredump::instructions();
     info!("Guessed system coredump handler to be {core_dump_msg:?}");
@@ -155,4 +159,52 @@ fn init_tracing_subscriber(file: File) {
         .with_file(true)
         .with_line_number(true)
         .init();
+}
+
+fn log_program_info() {
+    let name = env!("CARGO_PKG_NAME");
+    let version = env!("CARGO_PKG_VERSION");
+    tracing::info!("Starting {name} v{version}");
+}
+
+fn log_environment_variables() {
+    const ENVIRONMENT_VARIABLES: &[(&str, &[&str])] = &[
+        (
+            "Terminal emulator",
+            &[
+                "TERM",
+                "TERM_PROGRAM",
+                "TERM_PROGRAM_VERSION",
+                "VTE_VERSION",
+                "GNOME_TERMINAL_SCREEN",
+            ],
+        ),
+        (
+            "Color capabilities",
+            &[
+                "COLORTERM",
+                "FORCE_COLOR",
+                "NO_COLOR",
+                "CLICOLOR",
+                "CLICOLOR_FORCE",
+            ],
+        ),
+        ("Multiplexer", &["TMUX", "TMUX_PANE", "SCREEN", "STY"]),
+        ("Locale", &["LANG", "LC_ALL"]),
+    ];
+
+    let vars = ENVIRONMENT_VARIABLES
+        .iter()
+        .map(|(k, varnames)| {
+            (
+                *k,
+                varnames
+                    .iter()
+                    .map(|var| (*var, std::env::var(var).ok()))
+                    .collect::<BTreeMap<&'static str, Option<String>>>(),
+            )
+        })
+        .collect::<BTreeMap<&'static str, _>>();
+
+    tracing::info!("Environment variables detected: {vars:#?}")
 }
