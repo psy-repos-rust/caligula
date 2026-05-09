@@ -45,7 +45,7 @@ impl LogPaths {
 
     pub fn get_bug_report_msg(&self) -> String {
         format!(
-            "This is a bug caused by developer error. Please report the issue to https://github.com/ifd3f/caligula/issues and attach the log file in {}",
+            "This is likely a bug caused by developer error. Please report the issue to https://github.com/ifd3f/caligula/issues and attach the log file in {}",
             self.log_path
         )
     }
@@ -106,7 +106,9 @@ impl<'a> PanicMessage<'a> {
         writeln!(
             w,
             "{}",
-            "This is a bug caused by developer error.".bold().yellow()
+            "This is likely a bug caused by developer error."
+                .bold()
+                .yellow()
         )?;
         writeln!(
             w,
