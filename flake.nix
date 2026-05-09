@@ -68,6 +68,7 @@
                 prev.buildInputs
                 ++ (with pkgs; [
                   coreutils
+                  gdb
                   gzip
                   hyperfine
                   lz4

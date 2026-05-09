@@ -5,6 +5,9 @@
   modulesPath,
   ...
 }:
+let
+  gdbport = 12345;
+in
 {
   imports = [
     "${modulesPath}/profiles/minimal.nix"
@@ -15,9 +18,7 @@
   ];
 
   networking.useDHCP = true;
-
-  # We don't need a bootloader because qemu goes straight to kernel + initrd
-  boot.loader.grub.enable = false;
+  networking.firewall.enable = false;
 
   # Automatically log in as development user
   services.getty.autologinUser = "incitatus";
@@ -33,16 +34,38 @@
 
   system.stateVersion = "25.11";
 
+  # Run a GDB server
+  systemd.services.gdbserver = {
+    description = "GDB server";
+    wantedBy = [ "multi-user.target" ];
+    path = [ pkgs.gdb ];
+    script = ''
+      gdbserver --multi 0.0.0.0:${builtins.toString gdbport}
+    '';
+
+    serviceConfig = {
+      Type = "simple";
+      User = "root";
+      Restart = "always";
+      RestartSec = 5;
+    };
+  };
+
   virtualisation = {
     mountHostNixStore = true;
     useBootLoader = false;
+
+    sharedDirectories.caligula = {
+      source = ''"$CALIGULA_DIR"'';
+      target = "/caligula";
+    };
 
     qemu.options = [
       # Expose host's CPU to guest as normal
       "-cpu host"
 
       # Expose VM's monitor console to a socket
-      "-monitor unix:/tmp/caligula-devvm-monitor.sock,server,nowait"
+      ''-monitor unix:"$CALIGULA_DIR"/devvm.sock,server,nowait''
 
       # Needed or else ctrl-c kills the VM
       "-serial mon:stdio"
@@ -51,6 +74,12 @@
       # onto this for testing purposes.
       "-device nec-usb-xhci,id=xhci"
     ];
+
+    # Expose the GDB server to the host via socket
+    qemu.networkingOptions = lib.mkForce [
+      ''-nic user,hostfwd=unix:"$CALIGULA_DIR"/devvm_gdb.sock-:${builtins.toString gdbport}''
+    ];
+
     cores = 8;
     memorySize = 2048; # MiB
 
@@ -60,4 +89,5 @@
     # Make it run directly in the console
     graphics = false;
   };
+
 }
