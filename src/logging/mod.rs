@@ -176,7 +176,8 @@ pub fn log_uname() {
     info!(?uname.sysname, ?uname.version, ?uname.release, ?uname.machine, "uname info");
 }
 
-/// Log the contents of some files containing useful debug info about the user's system
+/// Log the contents of some files containing useful debug info about the user's
+/// system
 fn log_info_files() {
     const INFO_FILES: &[&str] = &[
         "/etc/os-release",
