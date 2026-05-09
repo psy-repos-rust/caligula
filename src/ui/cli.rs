@@ -148,7 +148,8 @@ fn parse_hash_arg(h: &str) -> Result<HashArg, String> {
             Ok((alg, expected_hash)) => {
                 if alg.len() > 1 {
                     Err(format!(
-                        "Ambiguous hash algorithm! Could be one of: {}. Please specify by prepending [alg]- to your hash.",
+                        "Ambiguous hash algorithm! Could be one of: {}. Please specify by \
+                         prepending [alg]- to your hash.",
                         alg.iter().format(", ")
                     ))
                 } else {

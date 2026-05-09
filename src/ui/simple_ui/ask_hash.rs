@@ -35,24 +35,23 @@ pub fn ask_hash(args: &BurnArgs, cf: CompressionFormat) -> anyhow::Result<Option
             })
         }
         (HashArg::Skip, _) => None,
-        (HashArg::Ask, _) => {
-            match find_hash_in_standard_files(&args.image) {
-                Some((algs, expected_hashfile, expected_hash))
-                    if Confirm::new(&format!(
-                        "Detected hash file {expected_hashfile} in the directory. Do you want to use it?"
-                    ))
-                    .with_default(true)
-                    .prompt()? =>
-                {
-                    Some(BeginHashParams {
-                        expected_hash,
-                        alg: ask_alg(&algs)?,
-                        hasher_compression: ask_hasher_compression(cf, args.hash_of)?,
-                    })
-                }
-                _ => ask_hash_loop(cf)?,
+        (HashArg::Ask, _) => match find_hash_in_standard_files(&args.image) {
+            Some((algs, expected_hashfile, expected_hash))
+                if Confirm::new(&format!(
+                    "Detected hash file {expected_hashfile} in the directory. Do you want to use \
+                     it?"
+                ))
+                .with_default(true)
+                .prompt()? =>
+            {
+                Some(BeginHashParams {
+                    expected_hash,
+                    alg: ask_alg(&algs)?,
+                    hasher_compression: ask_hasher_compression(cf, args.hash_of)?,
+                })
             }
-        }
+            _ => ask_hash_loop(cf)?,
+        },
         (HashArg::Hash { alg, expected_hash }, _) => Some(BeginHashParams {
             expected_hash: expected_hash.clone(),
             alg: *alg,

@@ -14,7 +14,10 @@ pub async fn wrap_osascript_escalation(
 
         let result = tokio::process::Command::new("osascript")
             .arg("-e")
-            .arg("do shell script \"mkdir -p /var/db/sudo/$USER; touch /var/db/sudo/$USER\" with administrator privileges")
+            .arg(
+                "do shell script \"mkdir -p /var/db/sudo/$USER; touch /var/db/sudo/$USER\" with \
+                 administrator privileges",
+            )
             .kill_on_drop(true)
             .spawn()
             .map_err(|_| EscalationError::MacOSDenial)?
