@@ -4,10 +4,15 @@ use clap::{Parser, Subcommand};
 
 use crate::benchmarking::benches::BenchType;
 
+const BENCH_ABOUT: &str = "Caligula benchmarking subsystem.
+
+WARNING: THESE COMMANDS ARE EXTREMELY DANGEROUS! THIS IS A SUBSYSTEM MEANT FOR CALIGULA \
+                           DEVELOPERS, RATHER THAN END USERS! COMMAND STABILITY IS NOT \
+                           GUARANTEED, AND IF YOU USE THIS, DO NOT EXPECT TO RECEIVE ANY HELP \
+                           WHATSOEVER! YOU HAVE BEEN WARNED!";
+
 #[derive(Parser, Debug)]
-#[clap(
-    about = "Caligula benchmarking subsystem.\n\nWARNING: THESE COMMANDS ARE EXTREMELY DANGEROUS! THIS IS A SUBSYSTEM MEANT FOR CALIGULA DEVELOPERS, RATHER THAN END USERS! COMMAND STABILITY IS NOT GUARANTEED, AND IF YOU USE THIS, DO NOT EXPECT TO RECEIVE ANY HELP WHATSOEVER! YOU HAVE BEEN WARNED!"
-)]
+#[clap(about = BENCH_ABOUT)]
 pub struct BenchArgs {
     #[command(subcommand)]
     pub command: BenchSubcommands,
