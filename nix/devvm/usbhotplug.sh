@@ -27,7 +27,7 @@ add_usb() {
                 extra_flags="$extra_flags,readonly=on"
                 shift
                 ;;
-            -*|--*)
+            --*|-*)
                 echo "Unknown option $1"
                 exit 1
                 ;;
