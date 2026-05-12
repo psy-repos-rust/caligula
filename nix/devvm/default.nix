@@ -34,6 +34,7 @@
                 self.devShells.${target}.default.buildInputs
                 ++ (with pkgs; [
                   curl
+                  tmux
                   wget
                 ]);
             };
