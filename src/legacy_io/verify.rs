@@ -4,7 +4,10 @@ use aligned_vec::avec_rt;
 
 use crate::{
     compression::CompressionFormat,
-    herder_api::write_verify::{LegacyWriteVerifyError, WriteVerifyEvent},
+    herder_api::{
+        error::{DiskError, InputFileError, IoError},
+        write_verify::{LegacyWriteVerifyError, WriteVerifyEvent},
+    },
     legacy_io::utils::{CountRead, FileSourceReader, try_read_exact},
 };
 
@@ -54,13 +57,14 @@ impl<S: Read, D: Read> VerifyOp<S, D> {
 
         loop {
             for _ in 0..self.checkpoint_period {
-                let file_read_bytes = try_read_exact(&mut file, &mut file_buf)?;
+                let file_read_bytes = try_read_exact(&mut file, &mut file_buf)
+                    .map_err(IoError::<InputFileError>::from)?;
                 if file_read_bytes == 0 {
                     checkpoint!();
                     return Ok(());
                 }
 
-                try_read_exact(&mut disk, &mut disk_buf)?;
+                try_read_exact(&mut disk, &mut disk_buf).map_err(IoError::<DiskError>::from)?;
 
                 if file_buf[..file_read_bytes] != disk_buf[..file_read_bytes] {
                     tracing::warn!(file_read_bytes, "verification failed");

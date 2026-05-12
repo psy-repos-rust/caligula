@@ -3,7 +3,11 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use super::HerdAction;
-use crate::{compression::CompressionFormat, device::Type};
+use crate::{
+    compression::CompressionFormat,
+    device::Type,
+    herder_api::error::{DiskError, InputFileError, IoError, UnmountError},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WriteVerifyAction {
@@ -69,23 +73,16 @@ pub struct WriteVerifyStart {
 pub enum LegacyWriteVerifyError {
     #[error("Unexpected end of output file. Is your output file too small?")]
     EndOfOutput,
-    #[error("Permission denied while opening file")]
-    PermissionDenied,
-    #[error("Disk verification failed!")]
-    VerificationFailed,
-    #[error("The child process unexpectedly terminated!")]
-    UnexpectedTermination,
     #[error("Unknown error occurred in child process: {0}")]
     UnknownChildProcError(String),
-    #[error("Failed to unmount disk (exit code {exit_code})\n{message}")]
-    FailedToUnmount { message: String, exit_code: i32 },
-}
-
-impl From<std::io::Error> for LegacyWriteVerifyError {
-    fn from(value: std::io::Error) -> Self {
-        match value.kind() {
-            std::io::ErrorKind::PermissionDenied => Self::PermissionDenied,
-            _ => Self::UnknownChildProcError(format!("{value:#}")),
-        }
-    }
+    #[error("Failed to unmount disk: {0}")]
+    FailedToUnmount(#[from] UnmountError),
+    #[error("The child process unexpectedly terminated!")]
+    UnexpectedTermination,
+    #[error("Disk verification failed!")]
+    VerificationFailed,
+    #[error("Error handling input: {0}")]
+    InputFile(#[from] IoError<InputFileError>),
+    #[error("Error handling output: {0}")]
+    OutputFile(#[from] IoError<DiskError>),
 }

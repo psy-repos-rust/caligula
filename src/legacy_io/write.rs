@@ -4,7 +4,10 @@ use aligned_vec::avec_rt;
 
 use crate::{
     compression::CompressionFormat,
-    herder_api::write_verify::{LegacyWriteVerifyError, WriteVerifyEvent},
+    herder_api::{
+        error::{DiskError, InputFileError, IoError},
+        write_verify::{LegacyWriteVerifyError, WriteVerifyEvent},
+    },
     legacy_io::utils::{CountWrite, FileSourceReader, try_read_exact},
 };
 
@@ -53,9 +56,10 @@ impl<S: Read, D: Write> WriteOp<S, D> {
         loop {
             for _ in 0..self.checkpoint_period {
                 // Try to fill up the block if we can.
-                let read_bytes = try_read_exact(&mut file, &mut buf)?;
+                let read_bytes =
+                    try_read_exact(&mut file, &mut buf).map_err(IoError::<InputFileError>::from)?;
                 if read_bytes == 0 {
-                    disk.flush()?;
+                    disk.flush().map_err(IoError::<DiskError>::from)?;
                     checkpoint!();
                     return Ok(file.decompressed_bytes());
                 }
@@ -63,7 +67,7 @@ impl<S: Read, D: Write> WriteOp<S, D> {
                 // Write the entire buffer, because we're doing direct writes.
                 // Even if we didn't fill the whole buffer, we are still writing the whole
                 // buffer.
-                let written_bytes = disk.write(&buf[..])?;
+                let written_bytes = disk.write(&buf[..]).map_err(IoError::<DiskError>::from)?;
                 if written_bytes == 0 {
                     checkpoint!();
                     return Err(LegacyWriteVerifyError::EndOfOutput);

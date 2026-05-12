@@ -6,7 +6,6 @@
 use std::{
     fs::{File, OpenOptions},
     io::{self, Read, Seek},
-    os::unix::process::ExitStatusExt,
     process::{Command, Stdio},
     thread::JoinHandle,
 };
@@ -16,7 +15,10 @@ use tracing_unwrap::ResultExt;
 
 use crate::{
     device,
-    herder_api::write_verify::*,
+    herder_api::{
+        error::{CommandError, DiskError, InputFileError, IoError, UnmountError},
+        write_verify::*,
+    },
     legacy_io::{SyncDataFile, VerifyOp, WriteOp, open_blockdev},
 };
 
@@ -53,39 +55,16 @@ fn run(
     args: &WriteVerifyAction,
 ) -> Result<(), LegacyWriteVerifyError> {
     if cfg!(target_os = "macos") && args.target_type == device::Type::Disk {
-        let mut command = Command::new("diskutil");
-        command
-            .arg("unmountdisk")
-            .arg(&args.dest)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-
-        info!(?command, "spawning process to unmount disk");
-        let mut child = command.spawn()?;
-        debug!("successfully ran diskutil, waiting on child process");
-
-        let exit = child.wait()?;
-        let mut stderr = String::new();
-        child.stderr.take().unwrap().read_to_string(&mut stderr)?;
-        let mut stdout = String::new();
-        child.stdout.take().unwrap().read_to_string(&mut stdout)?;
-
-        debug!(?exit, ?stderr, "child exited");
-
-        let exit_code = exit.into_raw();
-        if !exit.success() {
-            return Err(LegacyWriteVerifyError::FailedToUnmount {
-                message: format!("stderr: {stderr}\nstdout: {stdout}"),
-                exit_code,
-            });
-        }
+        run_diskutil_umount(args).map_err(UnmountError::Diskutil)?;
     }
 
     info!("Opening file {}", args.src.to_string_lossy());
     let mut file = File::open(&args.src).unwrap_or_log();
-    let size = file.seek(io::SeekFrom::End(0))?;
-    file.seek(io::SeekFrom::Start(0))?;
+    let size = file
+        .seek(io::SeekFrom::End(0))
+        .map_err(IoError::<InputFileError>::from)?;
+    file.seek(io::SeekFrom::Start(0))
+        .map_err(IoError::<InputFileError>::from)?;
 
     info!(size, "Got input file size");
 
@@ -97,9 +76,10 @@ fn run(
             .write(true)
             .create(true)
             .truncate(true)
-            .open(&args.dest)?,
+            .open(&args.dest)
+            .map_err(IoError::<DiskError>::from)?,
         device::Type::Disk | device::Type::Partition => {
-            open_blockdev(&args.dest, args.compression)?
+            open_blockdev(&args.dest, args.compression).map_err(IoError::<DiskError>::from)?
         }
     });
 
@@ -138,15 +118,19 @@ fn run(
     }
 
     info!("Rewinding source and target to beginning");
-    file.seek(io::SeekFrom::Start(0))?;
-    disk.seek(io::SeekFrom::Start(0))?;
+    file.seek(io::SeekFrom::Start(0))
+        .map_err(IoError::<InputFileError>::from)?;
+    disk.seek(io::SeekFrom::Start(0))
+        .map_err(IoError::<DiskError>::from)?;
 
     if args.target_type == device::Type::File {
         info!(
             ?actual_input_bytes,
             "Output is a file, truncating to input length in case we wrote too much"
         );
-        disk.0.set_len(actual_input_bytes)?;
+        disk.0
+            .set_len(actual_input_bytes)
+            .map_err(IoError::<DiskError>::from)?;
     };
 
     info!("Executing verification");
@@ -160,6 +144,51 @@ fn run(
         file_read_buf_size: buf_size,
     }
     .execute(tx)?;
+
+    Ok(())
+}
+
+/// Raw routine to execute `diskutil unmountdisk` on MacOS.
+fn run_diskutil_umount(args: &WriteVerifyAction) -> Result<(), CommandError> {
+    let mut command = Command::new("diskutil");
+    command
+        .arg("unmountdisk")
+        .arg(&args.dest)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    info!(?command, "spawning process to unmount disk");
+    let mut child = command
+        .spawn()
+        .map_err(|e| CommandError::Process(e.into()))?;
+
+    debug!("successfully ran diskutil, waiting on child process");
+    let exit = child.wait().map_err(|e| CommandError::Process(e.into()))?;
+
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .map_err(|e| CommandError::Comm(e.into()))?;
+    let mut stdout = String::new();
+    child
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut stdout)
+        .map_err(|e| CommandError::Comm(e.into()))?;
+
+    debug!(?exit, ?stderr, "child exited");
+
+    if !exit.success() {
+        return Err(CommandError::NonzeroExit {
+            exit: exit.code(),
+            stderr,
+            stdout,
+        });
+    }
 
     Ok(())
 }

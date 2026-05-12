@@ -3,7 +3,10 @@ use std::sync::Arc;
 use clap::{CommandFactory as _, Parser};
 use tracing::debug;
 
-use crate::facade::make_real_facade;
+use crate::{
+    facade::make_real_facade,
+    logging::{ErrorContext, crash_and_burn},
+};
 
 mod benchmarking;
 mod byteseries;
@@ -64,7 +67,7 @@ fn main() {
         Command::Burn(burn_args) => {
             let state_dir = util::ensure_state_dir().unwrap();
             let log_paths = logging::LogPaths::init(&state_dir);
-            logging::init_logging_parent(&log_paths);
+            let error_context = logging::init_logging_parent(&log_paths);
 
             let runtime = crate::runtime::AsyncRuntime::start();
             let facade = Arc::new(make_real_facade(log_paths.main()));
@@ -72,7 +75,7 @@ fn main() {
             debug!("Starting primary process");
             match ui::main(runtime, facade, log_paths.into(), burn_args) {
                 Ok(_) => (),
-                Err(e) => handle_toplevel_error(e),
+                Err(e) => handle_toplevel_error(&error_context, e),
             }
         }
         Command::HerderDaemon(args) => {
@@ -83,7 +86,7 @@ fn main() {
     }
 }
 
-fn handle_toplevel_error(err: anyhow::Error) {
+fn handle_toplevel_error(ctx: &ErrorContext, err: anyhow::Error) {
     use inquire::InquireError;
 
     if let Some(e) = err.downcast_ref::<InquireError>() {
@@ -91,11 +94,11 @@ fn handle_toplevel_error(err: anyhow::Error) {
             InquireError::OperationCanceled
             | InquireError::OperationInterrupted
             | InquireError::NotTTY => eprintln!("{e}"),
-            _ => panic!("{err}"),
+            _ => (),
         }
-    } else {
-        panic!("{err}");
     }
+
+    crash_and_burn(ctx, err);
 }
 
 /// Parse [Args] from the provided args, but format the help in an easy way for

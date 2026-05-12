@@ -22,7 +22,7 @@ use crate::{
         CaligulaFacade, DaemonError, WVState, WriteVerifyWorkflow, watch::Watch,
         workflow::write_verify::WriteVerifyWorkflowError,
     },
-    herder_api::write_verify::LegacyWriteVerifyError,
+    herder_api::{error::DiskError, write_verify::LegacyWriteVerifyError},
     logging::LogPaths,
     runtime::RemoteSpawn,
     ui::cli::UseSudo,
@@ -67,6 +67,8 @@ pub enum WriteOrEscalateError {
     Write(#[from] Arc<WriteVerifyWorkflowError>),
     #[error("Error escalating: {0}")]
     Escalate(#[from] DaemonError),
+    #[error("Not allowed to escalate")]
+    NotAllowedToEscalate,
 }
 
 /// Attempt to start burning the disk with the given params.
@@ -87,44 +89,56 @@ pub fn try_start_write_or_escalate(
         .clone()
         .start_write_verify_blocking(runtime, args.clone())
     {
-        Ok(p) => {
-            return Ok(p);
-        }
+        Ok(p) => return Ok(p),
         Err(e) => e,
     };
 
-    if let WriteVerifyWorkflowError::Worker(LegacyWriteVerifyError::PermissionDenied) = err.as_ref()
-    {
-        tracing::info!("Unescalated burn failed");
-        match (root, interactive) {
-            (UseSudo::Ask, true) => {
-                debug!("Failure due to insufficient perms, asking user to escalate");
+    tracing::info!("Unescalated burn failed with error, attempting to recover: {err}");
 
-                let response = Confirm::new(&format!(
-                    "We don't have permissions on {}. Escalate using sudo?",
-                    args.target.name
-                ))
-                .with_default(true)
-                .with_help_message(
-                    "We will use the sudo command, which may prompt you for a password.",
-                )
-                .prompt()
-                .expect("prompting the user should not fail");
+    match err.as_ref() {
+        WriteVerifyWorkflowError::Worker(e) => match e {
+            LegacyWriteVerifyError::OutputFile(e)
+                if e.kind() == Some(&DiskError::PermissionDenied) =>
+            {
+                request_escalation(runtime, facade.clone(), root, interactive, args)?;
+                Ok(facade.start_write_verify_blocking(runtime, args.clone())?)
+            }
+            _ => Err(err.into()),
+        },
+        error => panic!("An unrecoverable developer error occurred: {error}"),
+    }
+}
 
-                if response {
-                    facade.clone().escalate_blocking(runtime, None)?;
-                    return Ok(facade.start_write_verify_blocking(runtime, args.clone())?);
-                }
+fn request_escalation(
+    runtime: &impl RemoteSpawn,
+    facade: Arc<impl CaligulaFacade>,
+    root: UseSudo,
+    interactive: bool,
+    args: &WriteVerifyWorkflow,
+) -> Result<(), WriteOrEscalateError> {
+    match (root, interactive) {
+        (UseSudo::Ask, true) => {
+            debug!("Failure due to insufficient perms, asking user to escalate");
+
+            let response = Confirm::new(&format!(
+                "We don't have permissions on {}. Escalate using sudo?",
+                args.target.name
+            ))
+            .with_default(true)
+            .with_help_message("We will use the sudo command, which may prompt you for a password.")
+            .prompt()
+            .expect("prompting the user should not fail");
+
+            if !response {
+                return Err(WriteOrEscalateError::NotAllowedToEscalate);
             }
-            (UseSudo::Always, _) => {
-                facade.clone().escalate_blocking(runtime, None)?;
-                return Ok(facade.start_write_verify_blocking(runtime, args.clone())?);
-            }
-            _ => {}
         }
+        (UseSudo::Always, _) => (),
+        _ => return Err(WriteOrEscalateError::NotAllowedToEscalate),
     }
 
-    Err(err)?
+    facade.escalate_blocking(runtime, None)?;
+    Ok(())
 }
 
 /// Run the simple TUI.

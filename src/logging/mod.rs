@@ -1,19 +1,20 @@
 mod coredump;
+mod error;
 
 use std::{
+    self,
     collections::BTreeMap,
     fs::File,
-    io::Write,
     panic::{PanicHookInfo, set_hook},
     path::Path,
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
-use crossterm::{style::Stylize, terminal::disable_raw_mode};
+pub use error::{ErrorContext, ErrorInfo, ErrorSeverity, ErrorWithInfo, crash_and_burn};
 use tracing::{Level, info, warn};
 use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
 
-use crate::logging::coredump::CoredumpInstructions;
+use crate::logging::error::RemediationAdvice;
 
 const ISSUE_TRACKER_URL: &str = "https://github.com/ifd3f/caligula/issues";
 
@@ -57,7 +58,7 @@ const FILE_LOG_LEVEL: Level = Level::DEBUG;
 #[cfg(debug_assertions)]
 const FILE_LOG_LEVEL: Level = Level::TRACE;
 
-pub fn init_logging_parent(paths: &LogPaths) {
+pub fn init_logging_parent(paths: &LogPaths) -> Arc<error::ErrorContext> {
     let log_path = paths.main().to_owned();
     let file = File::create(&log_path).expect("Failed to create log file!");
 
@@ -68,77 +69,36 @@ pub fn init_logging_parent(paths: &LogPaths) {
     log_info_files();
     log_environment_variables();
 
-    let core_dump_msg = self::coredump::instructions();
-    info!("Guessed system coredump handler to be {core_dump_msg:?}");
+    let coredump_instructions = self::coredump::instructions();
+    info!("Guessed system coredump handler to be {coredump_instructions:?}");
+
+    let error_context = Arc::new(error::ErrorContext {
+        log_path,
+        coredump_instructions,
+    });
+
+    let ctx = error_context.clone();
 
     set_hook(Box::new(move |p| {
         tracing_panic::panic_hook(p);
 
-        disable_raw_mode().ok();
-
-        PanicMessage {
-            panic: p,
-            log_path: &log_path,
-            coredump_instructions: &core_dump_msg,
-        }
-        .write_to(std::io::stderr())
-        .ok();
-
-        // abort to trigger coredump
-        unsafe {
-            libc::abort();
-        }
+        crash_and_burn(&ctx, PanicError(p));
     }));
+
+    error_context
 }
 
-struct PanicMessage<'a> {
-    panic: &'a PanicHookInfo<'a>,
-    log_path: &'a str,
-    coredump_instructions: &'a CoredumpInstructions,
-}
+/// Simple wrapper for panic info that implements [`ErrorWithInfo`].
+#[derive(Debug, thiserror::Error)]
+#[error("{0}")]
+struct PanicError<'a>(&'a PanicHookInfo<'a>);
 
-impl<'a> PanicMessage<'a> {
-    fn write_to(&self, mut w: impl Write) -> std::io::Result<()> {
-        writeln!(w, "{}", "!!! PROGRAM PANICKED !!!".bold().red())?;
-        writeln!(w, "{}", self.panic.to_string().red())?;
-        writeln!(w)?;
-
-        writeln!(
-            w,
-            "{}",
-            "This is likely a bug caused by developer error."
-                .bold()
-                .yellow()
-        )?;
-        writeln!(
-            w,
-            "{}{}",
-            "We would highly appreciate it if you reported it here: ".yellow(),
-            ISSUE_TRACKER_URL.bold().yellow()
-        )?;
-        writeln!(
-            w,
-            "{}{}",
-            "Please include this log file in your bug report: ".yellow(),
-            self.log_path.bold().yellow()
-        )?;
-        writeln!(w)?;
-
-        writeln!(
-            w,
-            "{}",
-            "Though it's not required, it would help with debugging if you attached a coredump in \
-             addition to your logs."
-                .bold()
-                .cyan(),
-        )?;
-        writeln!(w, "{}", self.coredump_instructions.to_string().cyan())?;
-
-        // add extra newlines at end to break the "core dumped" message onto its own
-        // line
-        write!(w, "\n\n")?;
-
-        Ok(())
+impl<'a> ErrorWithInfo for PanicError<'a> {
+    fn error_info(&self) -> ErrorInfo {
+        ErrorInfo {
+            severity: ErrorSeverity::Panic,
+            remediation: RemediationAdvice::DeveloperError,
+        }
     }
 }
 
