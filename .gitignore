@@ -2,6 +2,8 @@
 *.bin
 *.json
 *.jsonl
+SHA256SUMS
+*.bz2
 pid
 
 .idea/
