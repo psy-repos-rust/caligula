@@ -1,4 +1,3 @@
-mod coredump;
 mod error;
 mod sysinfo;
 
@@ -11,7 +10,7 @@ use std::{
 };
 
 pub use error::{ErrorContext, ErrorInfo, ErrorSeverity, ErrorWithInfo, crash_and_burn};
-use tracing::{Level, info};
+use tracing::Level;
 use tracing_subscriber::{EnvFilter, fmt::format::FmtSpan};
 
 use crate::logging::error::RemediationAdvice;
@@ -69,13 +68,7 @@ pub fn init_logging_parent(paths: &LogPaths) -> Arc<error::ErrorContext> {
     sysinfo::log_info_files();
     sysinfo::log_environment_variables();
 
-    let coredump_instructions = self::coredump::instructions();
-    info!("Guessed system coredump handler to be {coredump_instructions:?}");
-
-    let error_context = Arc::new(error::ErrorContext {
-        log_path,
-        coredump_instructions,
-    });
+    let error_context = Arc::new(error::ErrorContext { log_path });
 
     let ctx = error_context.clone();
 
