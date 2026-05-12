@@ -91,10 +91,14 @@ fn handle_toplevel_error(ctx: &ErrorContext, err: anyhow::Error) {
 
     if let Some(e) = err.downcast_ref::<InquireError>() {
         match e {
+            // These "errors" are normal exit statuses
             InquireError::OperationCanceled
             | InquireError::OperationInterrupted
-            | InquireError::NotTTY => eprintln!("{e}"),
-            _ => (),
+            | InquireError::NotTTY => {
+                eprintln!("{e}");
+                return;
+            }
+            _ => (), // fallthrough to crash and burn
         }
     }
 
