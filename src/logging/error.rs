@@ -5,8 +5,6 @@ use std::{
 
 use crossterm::{style::Stylize, terminal::disable_raw_mode};
 
-use crate::logging::coredump::CoredumpInstructions;
-
 /// An error augmented with a function for generating [`ErrorInfo`] out of it,
 /// containing information to print in [`crash_and_burn()`] implementations.
 // TODO: kill anyhow and make it `: Error` instead of `Display + Debug`
@@ -27,17 +25,32 @@ impl ErrorWithInfo for anyhow::Error {
 /// Cause this program to fatally exit and print out a big error for the user to
 /// read.
 pub fn crash_and_burn(ctx: &ErrorContext, error: impl ErrorWithInfo) {
+    let info = error.error_info();
+
     tracing::error!("Crashing and burning with error! {error}");
     tracing::error!("Full debug of error: {error:#?}");
     tracing::error!("Full info of error: {:#?}", error.error_info());
 
     disable_raw_mode().ok();
 
-    write_error_message_to_terminal(std::io::stderr(), ctx, error).ok();
+    let mut w = std::io::stderr();
+    write_error_message_to_terminal(&mut w, ctx, error).ok();
 
-    // abort to trigger coredump
-    unsafe {
-        libc::abort();
+    if let ErrorSeverity::Panic = info.severity {
+        // Panics should trigger a coredump for developers and very motivated users to
+        // debug the memory state.
+
+        // add extra newlines at end to break the "core dumped" message onto its own
+        // line
+        write!(w, "\n\n").ok();
+
+        // abort to trigger coredump
+        unsafe {
+            libc::abort();
+        }
+    } else {
+        // All other errors should exit normally.
+        std::process::exit(1)
     }
 }
 
@@ -113,28 +126,6 @@ fn write_error_message_to_terminal(
         }
     };
 
-    write_coredump_instructions(&mut w, ctx)?;
-
-    // add extra newlines at end to break the "core dumped" message onto its own
-    // line
-    write!(w, "\n\n")?;
-
-    Ok(())
-}
-
-fn write_coredump_instructions(
-    mut w: impl Write,
-    ctx: &ErrorContext,
-) -> Result<(), std::io::Error> {
-    writeln!(
-        w,
-        "{}",
-        "Though it's not required when reporting issues, it would help with debugging if you \
-         attached a coredump in addition to your logs."
-            .bold()
-            .cyan(),
-    )?;
-    writeln!(w, "{}", ctx.coredump_instructions.to_string().cyan())?;
     Ok(())
 }
 
@@ -147,7 +138,6 @@ pub struct ErrorInfo {
 
 pub struct ErrorContext {
     pub log_path: String,
-    pub coredump_instructions: CoredumpInstructions,
 }
 
 /// How bad this error is.
