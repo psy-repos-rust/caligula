@@ -32,8 +32,8 @@ impl State {
 
     /// Handle the UI event, given the current state of the writer process.
     ///
-    /// Returns [`Self`], or [`None`] to signal completion.
-    #[tracing::instrument(skip_all, level = "debug", fields(ev))]
+    /// Returns new version of [`Self`], or [`None`] to signal completion.
+    #[tracing::instrument(level = "trace", skip_all, fields(ev))]
     pub fn on_event(self, child: &WVState, ev: UIEvent) -> Option<Self> {
         match ev {
             UIEvent::SleepTimeout => Some(self),
@@ -41,7 +41,7 @@ impl State {
         }
     }
 
-    #[tracing::instrument(skip_all, level = "debug", fields(ev))]
+    #[tracing::instrument(level = "debug", skip_all, fields(ev))]
     fn on_term_event(
         self,
         child: &WVState,

@@ -67,6 +67,8 @@
               buildInputs =
                 prev.buildInputs
                 ++ (with pkgs; [
+                  asciinema
+                  asciinema-agg
                   coreutils
                   gdb
                   gzip

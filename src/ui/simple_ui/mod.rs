@@ -33,7 +33,7 @@ mod ask_outfile;
 mod facade_ext;
 
 /// How often we refresh the display
-const REFRESH_PERIOD: Duration = Duration::from_millis(250);
+const REFRESH_PERIOD: Duration = Duration::from_millis(100);
 
 /// Run the simple UI setup wizard, a cruel being that interrogates the user
 /// until it is satisfied with its answers.
