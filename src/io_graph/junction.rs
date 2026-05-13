@@ -1,5 +1,4 @@
 use std::{
-    io::{Read, Write},
     sync::{
         RwLock,
         atomic::{AtomicU32, Ordering},
@@ -8,6 +7,8 @@ use std::{
 };
 
 use lockfree::queue::Queue;
+
+use crate::io_graph::{RecvBytes, SendBytes};
 
 pub struct JunctionTracker {
     /// Contains all transfers logged to this object since the last snapshot.
@@ -21,6 +22,7 @@ pub struct JunctionTracker {
     next_id: AtomicU32,
 }
 
+#[derive(Default)]
 struct Inner {
     q: Queue<(u32, TransferStat)>,
     e: Option<std::io::Error>,
@@ -29,7 +31,10 @@ struct Inner {
 impl JunctionTracker {
     pub fn new() -> Self {
         Self {
-            transfers: RwLock::new(Inner { q: Queue::new() }),
+            transfers: RwLock::new(Inner {
+                q: Queue::new(),
+                e: None,
+            }),
             next_id: 0.into(),
         }
     }
@@ -47,7 +52,7 @@ impl JunctionTracker {
         let values = std::mem::take(&mut *lock);
         drop(lock);
 
-        values.pop_iter().collect()
+        values.q.pop_iter().collect()
     }
 }
 
@@ -66,13 +71,18 @@ impl<'a> Junction<'a> {
     }
 
     pub fn log(&self, stat: TransferStat) {
-        self.parent.transfers.read().unwrap().push((self.id, stat));
+        self.parent
+            .transfers
+            .read()
+            .unwrap()
+            .q
+            .push((self.id, stat));
     }
 }
 
 /// Statistics representing a single transfer of bytes.
 ///
-/// Transfers usually represent syscalls or calls to [`Write`]/[`Read`].
+/// Transfers usually represent syscalls or calls to [`SendBytes`]/[`Read`].
 #[derive(Debug, Clone, Copy)]
 pub struct TransferStat {
     transfer_started: Instant,
@@ -117,16 +127,16 @@ impl TransferStat {
     }
 }
 
-/// A [`Read`] that logs to a [`Junction`].
+/// A [`RecvBytes`] that logs to a [`Junction`].
 #[must_use]
-pub struct ReadJunction<'a, R: Read> {
-    read: R,
+pub struct RecvJunction<'a, Rx: RecvBytes> {
+    recv: Rx,
     junction: Junction<'a>,
 }
 
-impl<'a, R: Read> ReadJunction<'a, R> {
-    pub fn new(read: R, junction: Junction<'a>) -> Self {
-        Self { read, junction }
+impl<'a, Rx: RecvBytes> RecvJunction<'a, Rx> {
+    pub fn new(recv: Rx, junction: Junction<'a>) -> Self {
+        Self { recv, junction }
     }
 
     pub fn junction(&self) -> &Junction<'a> {
@@ -134,32 +144,33 @@ impl<'a, R: Read> ReadJunction<'a, R> {
     }
 }
 
-impl<'a, R: Read> Read for ReadJunction<'a, R> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+impl<'a, Rx: RecvBytes> RecvBytes for RecvJunction<'a, Rx> {
+    fn recv(&mut self) -> std::io::Result<Option<bytes::Bytes>> {
         let start = Instant::now();
-        let result = self.read.read(buf);
+        let result = self.recv.recv();
         let end = Instant::now();
 
-        self.junction.log(TransferStat::new(
-            start,
-            end,
-            result.as_ref().map(|x| *x as u64).unwrap_or(0),
-        ));
+        let len = match &result {
+            Ok(Some(b)) => b.len() as u64,
+            _ => 0,
+        };
+
+        self.junction.log(TransferStat::new(start, end, len));
 
         result
     }
 }
 
-/// A [`Write`] that logs to a [`Junction`].
+/// A [`SendBytes`] that logs to a [`Junction`].
 #[must_use]
-pub struct WriteJunction<'a, W: Write> {
-    write: W,
+pub struct SendJunction<'a, Tx: SendBytes> {
+    send: Tx,
     junction: Junction<'a>,
 }
 
-impl<'a, W: Write> WriteJunction<'a, W> {
-    pub fn new(write: W, junction: Junction<'a>) -> Self {
-        Self { write, junction }
+impl<'a, Tx: SendBytes> SendJunction<'a, Tx> {
+    pub fn new(send: Tx, junction: Junction<'a>) -> Self {
+        Self { send, junction }
     }
 
     pub fn junction(&self) -> &Junction<'a> {
@@ -167,22 +178,23 @@ impl<'a, W: Write> WriteJunction<'a, W> {
     }
 }
 
-impl<'a, W: Write> Write for WriteJunction<'a, W> {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+impl<'a, Tx: SendBytes> SendBytes for SendJunction<'a, Tx> {
+    fn send(&mut self, bytes: bytes::Bytes) -> std::io::Result<()> {
+        let len = bytes.len();
         let start = Instant::now();
-        let result = self.write.write(buf);
+        let result = self.send.send(bytes);
         let end = Instant::now();
 
         self.junction.log(TransferStat::new(
             start,
             end,
-            result.as_ref().map(|x| *x as u64).unwrap_or(0),
+            result.as_ref().map(|_| len as u64).unwrap_or(0),
         ));
 
         result
     }
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.write.flush()
+    fn close(self) -> std::io::Result<()> {
+        self.send.close()
     }
 }

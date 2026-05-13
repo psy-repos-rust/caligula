@@ -38,6 +38,17 @@ macro_rules! generate {
                 }
             }
 
+            /// Construct a (dynamic-dispatched) [`crate::io_graph::HashWorker`] for this algorithm
+            /// digests the given `rx`.
+            ///
+            /// Yes, it's completely efficient to do this because the vtable invocation only happens
+            /// once, at `Worker::run()` invocation!
+            pub fn hash_worker<'a>(&self, rx: impl crate::io_graph::RecvBytes + Send + 'a) -> Box<dyn crate::io_graph::Worker<Output=bytes::Bytes, Error=std::io::Error> + 'a> {
+                match self {
+                    $(Self::$enum_arm => crate::io_graph::HashWorker::<$hash_inner, _>::new(rx),)*
+                }
+            }
+
             pub fn values() -> &'static [Self] {
                 &[$(Self::$enum_arm,)*]
             }

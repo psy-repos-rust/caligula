@@ -9,7 +9,7 @@ use crate::{
         DiskList, DiskWatcher, Escalator, FileAnalyzer, Orchestrator, WVState, WriteVerifyWorkflow,
         analyze_input::FileAnalysis,
         watch::Watch,
-        workflow::hash::{HashWorkflow, HashingState},
+        workflow::hash::{self, HashWorkflow, HashingState},
     },
 };
 
@@ -94,11 +94,8 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyWorkflow> for Fac
 }
 
 impl<H: LegacyFacade + Send + 'static> Orchestrator<HashWorkflow> for FacadeImpl<H> {
-    async fn start_workflow(&self, _workflow: HashWorkflow) -> Watch<HashingState> {
-        unimplemented!(
-            "Until this is implemented, for testing purposes, you may replace this with test \
-             values."
-        )
+    async fn start_workflow(&self, workflow: HashWorkflow) -> Watch<HashingState> {
+        hash::run(workflow).await
     }
 }
 

@@ -1,36 +1,25 @@
 use std::{fs::File, io::BufReader, path::PathBuf};
 
-use crate::io_graph::{
-    Node, NodeInfo,
-    junction::{Junction, ReadJunction},
-};
+use crate::io_graph::ReadReceiver;
 
-pub struct FileNode<'a> {
+pub struct FileNode {
     path: PathBuf,
     size: u64,
-    pub output: ReadJunction<'a, BufReader<File>>,
+    pub output: ReadReceiver<BufReader<File>>,
 }
 
-impl<'a> FileNode<'a> {
-    pub fn new(path: PathBuf, junction: Junction<'a>) -> std::io::Result<Self> {
+impl FileNode {
+    pub fn new(path: PathBuf, read_size: usize) -> std::io::Result<Self> {
         let f = File::open(&path)?;
         let size = f.metadata()?.len();
         Ok(Self {
-            output: ReadJunction::new(BufReader::new(f), junction),
+            output: ReadReceiver::new(BufReader::new(f), read_size),
             size,
             path,
         })
     }
-}
 
-impl<'a> Node<'a> for FileNode<'a> {
-    type Info = (PathBuf, u64);
-
-    fn info(&self) -> NodeInfo<'a, Self::Info> {
-        NodeInfo {
-            extra: (self.path.clone(), self.size),
-            inputs: vec![],
-            outputs: vec![self.output.junction().clone()],
-        }
+    pub fn size(&self) -> u64 {
+        self.size
     }
 }

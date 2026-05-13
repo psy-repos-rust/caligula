@@ -1,7 +1,6 @@
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use bytes::Bytes;
-use sha2::Sha256;
 use tokio::sync::{oneshot, watch};
 
 use crate::{
@@ -12,10 +11,7 @@ use crate::{
         workflow::{Workflow, WorkflowState},
     },
     hash::HashAlg,
-    io_graph::{
-        BufNode, FileNode, ForwardWorker, GraphContext, HashWorker, JunctionTracker, Node,
-        TransferStat, Worker as _,
-    },
+    io_graph::{BufNode, FileNode, ForwardWorker, GraphContext, JunctionTracker, Worker as _},
 };
 
 /// Parameters for starting a new hashing operation.
@@ -58,7 +54,7 @@ impl HashingState {
         Self {
             read_bytes_history: ByteSeries::new(now),
             file_size_bytes: 0,
-            result: Some(error),
+            result: Some(Err(error)),
         }
     }
 
@@ -80,13 +76,13 @@ impl WorkflowState for HashingState {
     }
 }
 
-async fn run(params: HashWorkflow) -> Watch<HashingState> {
+pub async fn run(params: HashWorkflow) -> Watch<HashingState> {
     let state = Arc::new((GraphContext::new(), JunctionTracker::new()));
 
     let (tx_start, rx_start) = oneshot::channel();
-    let (tx_end, rx_end) = oneshot::channel();
+    let (tx_end, _rx_end) = oneshot::channel();
 
-    let thread = std::thread::spawn({
+    let _thread = std::thread::spawn({
         let state = state.clone();
         let params = params.clone();
         move || {
@@ -103,9 +99,9 @@ async fn run(params: HashWorkflow) -> Watch<HashingState> {
         }
     };
 
-    let (tx, rx) = watch::channel(HashingState::new(Instant::now(), start.size));
+    let (_tx, rx) = watch::channel(HashingState::new(Instant::now(), start.size));
     tokio::task::spawn_local(async move {
-        let (ctx, js) = state.as_ref();
+        let (_ctx, _js) = state.as_ref();
     });
 
     Watch { rx }
@@ -125,18 +121,17 @@ fn run_thread(
 ) {
     std::thread::scope(move |s| {
         let setup = (|| {
-            let file = FileNode::new(wf.file.clone(), js.create())?;
-            let buf = BufNode::new(65536, js.create(), js.create());
-            let file_info = file.info();
-            let _buf_info = buf.info();
+            let file = FileNode::new(wf.file.clone(), 65536)?;
+            let buf = BufNode::new(1024);
+
+            let j = js.create();
 
             let start_data = StartData {
-                size: file_info.extra.1,
-                hasher_input_junction: buf.output.junction().id(),
+                size: file.size(),
+                hasher_input_junction: j.id(),
             };
-
-            let read = ForwardWorker::new(4096, file.output, buf.input);
-            let hash = HashWorker::<Sha256, _>::new(4096, buf.output);
+            let read = ForwardWorker::new(file.output, buf.input);
+            let hash = wf.alg.hash_worker(buf.output);
 
             Ok::<_, std::io::Error>((start_data, read, hash))
         })();
