@@ -56,6 +56,8 @@ Print this message or the help of the given subcommand(s)
 
 ## How to install
 
+[![Packaging status](https://repology.org/badge/vertical-allrepos/caligula-burning-tool.svg)](https://repology.org/project/caligula-burning-tool/versions)
+
 There are a couple of ways to install Caligula.
 
 - **Binary release:** You can download pre-built binaries from [the latest Github release](https://github.com/ifd3f/caligula/releases/latest).
