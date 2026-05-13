@@ -4,6 +4,7 @@
 *.jsonl
 SHA256SUMS
 *.bz2
+caligula*
 pid
 
 .idea/

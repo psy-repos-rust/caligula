@@ -1,4 +1,8 @@
-use std::{fs::File, io::BufReader, path::PathBuf};
+use std::{fs::File, io::BufReader, os::fd::AsRawFd, path::PathBuf};
+
+use nix::fcntl::PosixFadviseAdvice;
+use tracing::warn;
+use tracing_unwrap::ResultExt;
 
 use crate::io_graph::ReadReceiver;
 
@@ -12,8 +16,12 @@ impl FileNode {
     pub fn new(path: PathBuf, read_size: usize) -> std::io::Result<Self> {
         let f = File::open(&path)?;
         let size = f.metadata()?.len();
+        
+        nix::fcntl::posix_fadvise(&f, 0, 0, PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL).ok_or_log();
+
+        let br = BufReader::with_capacity(read_size, f);
         Ok(Self {
-            output: ReadReceiver::new(BufReader::new(f), read_size),
+            output: ReadReceiver::new(br, read_size),
             size,
             path,
         })

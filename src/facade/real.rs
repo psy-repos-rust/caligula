@@ -95,7 +95,8 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyWorkflow> for Fac
 
 impl<H: LegacyFacade + Send + 'static> Orchestrator<HashWorkflow> for FacadeImpl<H> {
     async fn start_workflow(&self, workflow: HashWorkflow) -> Watch<HashingState> {
-        hash::run(workflow).await
+        let (w, _jh) = hash::run(workflow).await;
+        w
     }
 }
 

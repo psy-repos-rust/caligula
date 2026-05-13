@@ -1,7 +1,11 @@
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use bytes::Bytes;
-use tokio::sync::{oneshot, watch};
+use bytesize::ByteSize;
+use tokio::{
+    sync::{oneshot, watch},
+    task::JoinHandle,
+};
 
 use crate::{
     byteseries::ByteSeries,
@@ -76,11 +80,11 @@ impl WorkflowState for HashingState {
     }
 }
 
-pub async fn run(params: HashWorkflow) -> Watch<HashingState> {
+pub async fn run(params: HashWorkflow) -> (Watch<HashingState>, Option<JoinHandle<()>>) {
     let state = Arc::new((GraphContext::new(), JunctionTracker::new()));
 
     let (tx_start, rx_start) = oneshot::channel();
-    let (tx_end, _rx_end) = oneshot::channel();
+    let (tx_end, rx_end) = oneshot::channel();
 
     let _thread = std::thread::spawn({
         let state = state.clone();
@@ -95,16 +99,18 @@ pub async fn run(params: HashWorkflow) -> Watch<HashingState> {
         Ok(r) => r,
         Err(e) => {
             let (_tx, rx) = watch::channel(HashingState::failed(Instant::now(), e));
-            return Watch { rx };
+            return (Watch { rx }, None);
         }
     };
 
     let (_tx, rx) = watch::channel(HashingState::new(Instant::now(), start.size));
-    tokio::task::spawn_local(async move {
+    let jh = tokio::task::spawn_local(async move {
         let (_ctx, _js) = state.as_ref();
+
+        rx_end.await.unwrap().unwrap();
     });
 
-    Watch { rx }
+    (Watch { rx }, Some(jh))
 }
 
 struct StartData {
@@ -121,7 +127,7 @@ fn run_thread(
 ) {
     std::thread::scope(move |s| {
         let setup = (|| {
-            let file = FileNode::new(wf.file.clone(), 65536)?;
+            let file = FileNode::new(wf.file.clone(), ByteSize::kib(64).as_u64() as usize)?;
             let buf = BufNode::new(1024);
 
             let j = js.create();

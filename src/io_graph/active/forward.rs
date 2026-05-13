@@ -24,6 +24,8 @@ impl<Rx: RecvBytes + Send, Tx: SendBytes + Send> Worker for ForwardWorker<Rx, Tx
             }
         }
 
+        self.output.close()?;
+
         Ok(())
     }
 }
