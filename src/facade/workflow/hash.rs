@@ -25,6 +25,7 @@ use crate::{
 };
 
 const REFRESH_PERIOD: Duration = Duration::from_millis(10);
+
 /// Parameters for starting a new hashing operation.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct HashWorkflow {
@@ -44,7 +45,7 @@ impl Workflow for HashWorkflow {
 
 /// Active, point-in-time state of a hashing operation.
 pub struct HashingState {
-    /// Read speed history.
+    /// History of cumulative bytes read.
     read_bytes_history: ByteSeries,
     /// How big the file is
     file_size_bytes: u64,
@@ -95,14 +96,17 @@ pub async fn run(params: HashWorkflow) -> (Watch<HashingState>, Option<JoinHandl
     // spawn thread with channels for communicating one-off data
     let (tx_start, rx_start) = oneshot::channel();
     let (tx_end, mut rx_end) = oneshot::channel();
-    let _thread = std::thread::spawn({
-        let state = state.clone();
-        let params = params.clone();
-        move || {
-            let (ctx, js) = state.as_ref();
-            run_thread(&params, tx_start, tx_end, ctx, js)
-        }
-    });
+    let _thread = std::thread::Builder::new()
+        .name("hashworkflow".into())
+        .spawn({
+            let state = state.clone();
+            let params = params.clone();
+            move || {
+                let (ctx, js) = state.as_ref();
+                run_thread(&params, tx_start, tx_end, ctx, js)
+            }
+        })
+        .expect("Failed to spawn thread");
 
     // ensure it started correctly
     let start = match rx_start.await.expect("thread panicked!") {
@@ -139,7 +143,7 @@ async fn tracker_coroutine(
     rx_end: &mut oneshot::Receiver<Result<Bytes, std::io::Error>>,
     tx: watch::Sender<HashingState>,
 ) {
-    tracing::debug!("starting tracker coroutine");
+    tracing::debug!(?REFRESH_PERIOD, "starting tracker coroutine");
     let mut interval = interval(REFRESH_PERIOD);
 
     loop {
@@ -152,7 +156,9 @@ async fn tracker_coroutine(
             tx.send_modify(|s| {
                 for (j, txfr) in hist {
                     if j == hasher_input_junction {
-                        s.read_bytes_history.push(txfr.started(), txfr.bytes());
+                        // perform a cumulative sum
+                        let last = s.read_bytes_history().last_datapoint().1;
+                        s.read_bytes_history.push(txfr.started(), last + txfr.bytes());
                     }
                 }
             });
@@ -161,6 +167,7 @@ async fn tracker_coroutine(
         match rx_end.try_recv() {
             Ok(r) => {
                 // done: notify and quit
+                tracing::debug!("sending completion notification");
                 tx.send_modify(|s| {
                     s.read_bytes_history.push(Instant::now(), s.file_size_bytes);
                     s.result = Some(r.map_err(Arc::new));
@@ -169,9 +176,10 @@ async fn tracker_coroutine(
             }
             Err(oneshot::error::TryRecvError::Empty) => {
                 // no response: keep going
+                tracing::trace!("not complete yet, keep going");
             }
             Err(oneshot::error::TryRecvError::Closed) => {
-                panic!("Hasher thread panicked!")
+                panic!("Hash workflow thread dropped its sender!")
             }
         }
     }
@@ -227,14 +235,14 @@ fn run_thread(
             })
             .unwrap();
 
-        tracing::info!("threads spawned, joining on both");
+        tracing::debug!("threads spawned, joining on both");
         let r = r.join().unwrap();
         let h = h.join().unwrap();
 
         let end = r.and(h);
 
         // send final result
-        tracing::info!(?end, "notifying with end data");
+        tracing::debug!(?end, "notifying with end data");
         tx_end.send(end).ok();
     })
 }

@@ -43,11 +43,12 @@ const REFRESH_PERIOD: Duration = Duration::from_millis(100);
 /// doesn't.
 #[tracing::instrument(skip_all)]
 pub fn do_setup_wizard(
-    orc: &impl Orchestrator<HashWorkflow>,
+    runtime: impl RemoteSpawn,
+    orc: Arc<impl Orchestrator<HashWorkflow > + Send + Sync + 'static>,
     args: &BurnArgs,
 ) -> Result<Option<WriteVerifyWorkflow>, anyhow::Error> {
     let compression = ask_compression(args)?;
-    let _hash_info = ask_hash(orc, args, compression)?;
+    let _hash_info = ask_hash(runtime, orc, args, compression)?;
     let target = match &args.out {
         Some(f) => WriteTarget::try_from(f.as_ref())?,
         None => ask_outfile(args)?,
