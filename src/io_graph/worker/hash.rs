@@ -21,11 +21,7 @@ impl<H: Digest, Rx: RecvBytes> Worker<Rx> for HashWorker<H> {
     type Error = std::io::Error;
     type Output = Bytes;
 
-    fn run(
-        self: Box<Self>,
-        context: &GraphContext,
-        args: Rx,
-    ) -> Result<Self::Output, Self::Error> {
+    fn run(self: Box<Self>, context: &GraphContext, args: Rx) -> Result<Self::Output, Self::Error> {
         let mut rx = args;
         let mut h = H::new();
 

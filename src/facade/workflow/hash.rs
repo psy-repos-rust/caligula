@@ -20,7 +20,8 @@ use crate::{
     },
     hash::HashAlg,
     io_graph::{
-        self, GraphContext, JunctionTracker, RecvJunction, Worker as _, worker::FileReader,
+        self, GraphContext, JunctionTracker, SendJunction, Worker as _,
+        worker::{DecompressError, DecompressorWorker, FileReader},
     },
 };
 
@@ -50,7 +51,17 @@ pub struct HashingState {
     /// How big the file is
     file_size_bytes: u64,
     /// Result of the operation. If [`None`], the operation is not yet finished.
-    result: Option<Result<Bytes, Arc<std::io::Error>>>,
+    result: Option<Result<Bytes, Arc<HashingError>>>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum HashingError {
+    #[error("Reader thread failed with error: {0}")]
+    Read(std::io::Error),
+    #[error("Decompressor thread failed with error: {0}")]
+    Decompress(DecompressError),
+    #[error("Hasher thread failed with error: {0}")]
+    Hash(std::io::Error),
 }
 
 impl HashingState {
@@ -62,7 +73,7 @@ impl HashingState {
         }
     }
 
-    fn failed(now: Instant, error: std::io::Error) -> Self {
+    fn failed(now: Instant, error: HashingError) -> Self {
         Self {
             read_bytes_history: ByteSeries::new(now),
             file_size_bytes: 0,
@@ -80,7 +91,7 @@ impl HashingState {
 }
 
 impl WorkflowState for HashingState {
-    type Error = Arc<std::io::Error>;
+    type Error = Arc<HashingError>;
     type Success = Bytes;
 
     fn result(&self) -> Option<&Result<Self::Success, Self::Error>> {
@@ -103,17 +114,24 @@ pub async fn run(params: HashWorkflow) -> (Watch<HashingState>, Option<JoinHandl
             let params = params.clone();
             move || {
                 let (ctx, js) = state.as_ref();
-                run_thread(&params, tx_start, tx_end, ctx, js)
+                let end = run_thread(&params, tx_start, ctx, js);
+                // send final result
+                tracing::debug!(?end, "notifying with end data");
+                tx_end.send(end).ok();
             }
         })
         .expect("Failed to spawn thread");
 
     // ensure it started correctly
-    let start = match rx_start.await.expect("thread panicked!") {
+    let start = match rx_start.await {
         Ok(r) => r,
-        Err(e) => {
-            // failed to start? return an error
-            let (_tx, rx) = watch::channel(HashingState::failed(Instant::now(), e));
+        Err(_) => {
+            // dropped without a value. check if end is populated and return error if so
+            let err = rx_end
+                .await
+                .expect("Thread panicked!") // dropped
+                .expect_err("rx_end was successful but rx_start was not! This is a logic error!");
+            let (_tx, rx) = watch::channel(HashingState::failed(Instant::now(), err));
             return (Watch { rx }, None);
         }
     };
@@ -124,7 +142,7 @@ pub async fn run(params: HashWorkflow) -> (Watch<HashingState>, Option<JoinHandl
     let (tx, rx) = watch::channel(HashingState::new(Instant::now(), start.file_size));
     let tracker_jh = tokio::task::spawn_local(async move {
         let (_ctx, js) = state.as_ref();
-        tracker_coroutine(start.hasher_input_junction, js, &mut rx_end, tx).await;
+        tracker_coroutine(start.reader_junction, js, &mut rx_end, tx).await;
     });
 
     (Watch { rx }, Some(tracker_jh))
@@ -133,14 +151,14 @@ pub async fn run(params: HashWorkflow) -> (Watch<HashingState>, Option<JoinHandl
 #[derive(Debug, Clone)]
 struct StartData {
     file_size: u64,
-    hasher_input_junction: u32,
+    reader_junction: u32,
 }
 
 #[tracing::instrument(skip_all)]
 async fn tracker_coroutine(
     hasher_input_junction: u32,
     js: &JunctionTracker,
-    rx_end: &mut oneshot::Receiver<Result<Bytes, std::io::Error>>,
+    rx_end: &mut oneshot::Receiver<Result<Bytes, HashingError>>,
     tx: watch::Sender<HashingState>,
 ) {
     tracing::debug!(?REFRESH_PERIOD, "starting tracker coroutine");
@@ -158,7 +176,8 @@ async fn tracker_coroutine(
                     if j == hasher_input_junction {
                         // perform a cumulative sum
                         let last = s.read_bytes_history().last_datapoint().1;
-                        s.read_bytes_history.push(txfr.started(), last + txfr.bytes());
+                        s.read_bytes_history
+                            .push(txfr.started(), last + txfr.bytes());
                     }
                 }
             });
@@ -170,7 +189,7 @@ async fn tracker_coroutine(
                 tracing::debug!("sending completion notification");
                 tx.send_modify(|s| {
                     s.read_bytes_history.push(Instant::now(), s.file_size_bytes);
-                    s.result = Some(r.map_err(Arc::new));
+                    s.result = Some(r.map_err(|e| Arc::from(e)));
                 });
                 return;
             }
@@ -188,61 +207,91 @@ async fn tracker_coroutine(
 #[tracing::instrument(skip_all)]
 fn run_thread(
     wf: &HashWorkflow,
-    tx_start: oneshot::Sender<std::io::Result<StartData>>,
-    tx_end: oneshot::Sender<std::io::Result<Bytes>>,
+    tx_start: oneshot::Sender<StartData>,
     ctx: &GraphContext,
     js: &JunctionTracker,
-) {
-    std::thread::scope(move |s| {
+) -> Result<Bytes, HashingError> {
+    std::thread::scope(move |s| -> Result<Bytes, HashingError> {
         // ensure file can be opened
-        let file = match FileReader::new(&wf.file, 65536) {
-            Ok(f) => f,
-            Err(e) => {
-                tracing::error!("error opening file for hashing: {e}");
-                tx_start.send(Err(e)).ok();
-                return;
+        let file = FileReader::new(&wf.file, 65536).map_err(HashingError::Read)?;
+        let file_size = file.size();
+
+        // construct the other nodes in the graph
+        let hash = wf.alg.hash_worker();
+        let decompressor = match wf.compression {
+            CompressionFormat::Identity => None,
+            other => Some(DecompressorWorker::new(other, 65536)),
+        };
+
+        // calculate pipeline topology and what buffers are needed to connect things
+        let (robjs, dobjs, hobjs) = match decompressor {
+            Some(d) => {
+                let (reader_send, reader_recv) = io_graph::buf(1024);
+                let (decomp_send, decomp_recv) = io_graph::buf(1024);
+
+                (
+                    (file, reader_send),
+                    Some((reader_recv, d, decomp_send)),
+                    (decomp_recv, hash),
+                )
+            }
+            None => {
+                let (reader_send, reader_recv) = io_graph::buf(1024);
+
+                ((file, reader_send), None, (reader_recv, hash))
             }
         };
 
-        // construct the rest of the graph
-        let hasher_input_junction = js.create();
-        let (buf_input, buf_output) = io_graph::buf(1024);
-        let hash = wf.alg.hash_worker();
+        let reader_junction = js.create();
 
         let start = StartData {
-            file_size: file.size(),
-            hasher_input_junction: hasher_input_junction.id(),
+            file_size,
+            reader_junction: reader_junction.id(),
         };
         tracing::info!(?start, "notifying with start data");
 
         // notify the caller of success
-        let Ok(()) = tx_start.send(Ok(start)) else {
-            return;
+        let Ok(()) = tx_start.send(start) else {
+            // failed to notify? just return a sentinel
+            return Ok(Bytes::new());
         };
 
         // actually do the thing
         let r = std::thread::Builder::new()
-            .name("fread".into())
-            .spawn_scoped(s, move || file.run(ctx, buf_input.bind_to_thread()))
-            .unwrap();
-        let h = std::thread::Builder::new()
-            .name("hash".into())
+            .name("fileread".into())
             .spawn_scoped(s, move || {
-                hash.run(
-                    ctx,
-                    RecvJunction::new(buf_output.bind_to_thread(), hasher_input_junction),
-                )
+                let (w, tx) = robjs;
+                w.run(ctx, SendJunction::new(tx.bind_to_thread(), reader_junction))
             })
             .unwrap();
 
-        tracing::debug!("threads spawned, joining on both");
-        let r = r.join().unwrap();
-        let h = h.join().unwrap();
+        let d = dobjs.map(|dobjs| {
+            std::thread::Builder::new()
+                .name("decompress".into())
+                .spawn_scoped(s, move || {
+                    let (rx, w, tx) = dobjs;
+                    w.run(ctx, (rx.bind_to_thread(), tx.bind_to_thread()))
+                })
+                .unwrap()
+        });
 
-        let end = r.and(h);
+        let h = std::thread::Builder::new()
+            .name("hash".into())
+            .spawn_scoped(s, move || {
+                let (rx, w) = hobjs;
+                w.run(ctx, rx.bind_to_thread())
+            })
+            .unwrap();
 
-        // send final result
-        tracing::debug!(?end, "notifying with end data");
-        tx_end.send(end).ok();
+        tracing::debug!("threads spawned, joining on all");
+        r.join().unwrap().map_err(HashingError::Read)?;
+
+        if let Some(d) = d {
+            d.join().unwrap().map_err(HashingError::Decompress)?;
+        }
+
+        let out = h.join().unwrap().map_err(HashingError::Hash)?;
+
+        Ok(out)
     })
 }

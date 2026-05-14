@@ -44,7 +44,7 @@ const REFRESH_PERIOD: Duration = Duration::from_millis(100);
 #[tracing::instrument(skip_all)]
 pub fn do_setup_wizard(
     runtime: impl RemoteSpawn,
-    orc: Arc<impl Orchestrator<HashWorkflow > + Send + Sync + 'static>,
+    orc: Arc<impl Orchestrator<HashWorkflow> + Send + Sync + 'static>,
     args: &BurnArgs,
 ) -> Result<Option<WriteVerifyWorkflow>, anyhow::Error> {
     let compression = ask_compression(args)?;

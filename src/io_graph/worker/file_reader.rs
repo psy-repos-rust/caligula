@@ -39,6 +39,7 @@ impl FileReader {
         self.size
     }
 
+    #[expect(unused)]
     pub fn path(&self) -> &Path {
         &self.path
     }

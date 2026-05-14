@@ -8,11 +8,12 @@ use serde::{Serialize, de::DeserializeOwned};
 
 pub use crate::io_graph::{
     buf::buf,
-    junction::{Junction, JunctionTracker, RecvJunction},
+    junction::{Junction, JunctionTracker, RecvJunction, SendJunction},
 };
 
 mod buf;
 mod junction;
+pub mod util;
 pub mod worker;
 
 /// A [`Node`] is an object in the I/O graph connected to other objects.
