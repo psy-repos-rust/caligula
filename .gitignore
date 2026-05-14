@@ -8,6 +8,8 @@ caligula*
 pid
 *.data
 *.old
+/caligula
+/caligula-*
 
 .idea/
 
