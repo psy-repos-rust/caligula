@@ -16,19 +16,15 @@ use std::{
 use futures::stream::BoxStream;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub struct StartWriterResponse<E> {
-    pub start: WriteVerifyStart,
-    pub events: BoxStream<'static, Result<WriteVerifyEvent, E>>,
+pub struct HerderResponse<A: HerdAction, E> {
+    pub start: A::Start,
+    pub events: BoxStream<'static, Result<A::Event, E>>,
 }
 
-pub trait HerderService {
+pub trait HerderService<A: HerdAction> {
     type Error: Error;
 
-    // TODO: make it support more than just writers
-    async fn start_writer(
-        &self,
-        action: WriteVerifyAction,
-    ) -> Result<StartWriterResponse<Self::Error>, Self::Error>;
+    async fn start(&self, action: A) -> Result<HerderResponse<A, Self::Error>, Self::Error>;
 }
 
 /// Tell the herder to start a herd for performing an arbitrary action.
@@ -46,6 +42,8 @@ pub struct StartHerd<A> {
 pub trait HerdAction:
     Serialize + DeserializeOwned + Debug + Clone + PartialEq + Send + 'static
 {
+    type Start: Debug;
+
     /// The events emitted by the herd afterwards.
     type Event: HerdEvent;
 }
@@ -101,5 +99,3 @@ macro_rules! impl_try_from_top_level_herd_event {
 }
 
 use impl_try_from_top_level_herd_event;
-
-use crate::herder_api::write_verify::{WriteVerifyAction, WriteVerifyEvent, WriteVerifyStart};

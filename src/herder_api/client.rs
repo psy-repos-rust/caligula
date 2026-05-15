@@ -4,7 +4,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use crate::{
     facade::StartWriterError,
     herder_api::{
-        HerdEvent as _, HerderService, StartHerd, StartWriterResponse, TopLevelHerdEvent,
+        HerdEvent as _, HerderResponse, HerderService, StartHerd, TopLevelHerdEvent,
         write_verify::{WriteVerifyAction, WriteVerifyEvent},
     },
     ipc_common::{read_msg_async, write_msg_async},
@@ -45,17 +45,17 @@ where
     comm: std::sync::Mutex<Option<(R, W)>>,
 }
 
-impl<R, W> HerderService for HerderClient<R, W>
+impl<R, W> HerderService<WriteVerifyAction> for HerderClient<R, W>
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
     type Error = StartWriterError<WriteVerifyEvent>;
 
-    async fn start_writer(
+    async fn start(
         &self,
         action: WriteVerifyAction,
-    ) -> Result<StartWriterResponse<Self::Error>, Self::Error> {
+    ) -> Result<HerderResponse<WriteVerifyAction, Self::Error>, Self::Error> {
         let (rx, mut tx) =
             self.comm.lock().unwrap().take().expect(
                 "called more than once! multiple requests are not currently supported! sowwy!",
@@ -90,7 +90,7 @@ where
             }
         })?;
 
-        Ok(StartWriterResponse {
+        Ok(HerderResponse {
             start: initial_info,
             events: stream,
         })

@@ -5,7 +5,7 @@ use tokio::process::{Child, ChildStdin, ChildStdout};
 use crate::{
     escalation::run_escalate,
     herder_api::{
-        self, HerdEvent, HerderService, StartWriterResponse, client::HerderClient,
+        self, HerdEvent, HerderResponse, HerderService, client::HerderClient,
         write_verify::WriteVerifyAction,
     },
 };
@@ -93,13 +93,13 @@ pub struct ChildHerderClient {
     client: Client,
 }
 
-impl HerderService for ChildHerderClient {
-    type Error = <Client as HerderService>::Error;
+impl HerderService<WriteVerifyAction> for ChildHerderClient {
+    type Error = <Client as HerderService<WriteVerifyAction>>::Error;
 
-    async fn start_writer(
+    async fn start(
         &self,
         action: WriteVerifyAction,
-    ) -> Result<StartWriterResponse<Self::Error>, Self::Error> {
-        self.client.start_writer(action).await
+    ) -> Result<HerderResponse<WriteVerifyAction, Self::Error>, Self::Error> {
+        self.client.start(action).await
     }
 }

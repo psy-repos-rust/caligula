@@ -61,7 +61,7 @@ impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
 
         let res = inner
             .pick_child_process()
-            .start_writer(params.make_child_config())
+            .start(params.make_child_config())
             .await;
 
         let res = match res {

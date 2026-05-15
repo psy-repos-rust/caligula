@@ -21,6 +21,7 @@ pub struct WriteVerifyAction {
 
 impl HerdAction for WriteVerifyAction {
     type Event = WriteVerifyEvent;
+    type Start = WriteVerifyStart;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
