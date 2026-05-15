@@ -17,6 +17,7 @@ use crate::{
 };
 
 mod analyze_input;
+mod child;
 mod disks;
 mod legacy_facade;
 mod real;
@@ -90,8 +91,8 @@ pub trait Escalator {
     /// method (or [`None`] to automatically guess which one to use).
     ///
     /// Returns [`Ok`] if we successfully managed to escalate, or an error if we
-    /// failed. If we were already escalated before this was called, returns
-    /// [`Ok`].
+    /// failed. This operation is idempotent: if we were already escalated
+    /// before this was called, returns [`Ok`].
     ///
     /// Once this is called, all future workflows will be routed through the
     /// escalated child process rather than executing at the parent's
@@ -107,6 +108,6 @@ pub trait Escalator {
 }
 
 /// Make the actual prod-used CaligulaFacade implementation.
-pub fn make_real_facade(log_path: &str) -> impl CaligulaFacade {
-    self::real::FacadeImpl::new(legacy_facade::make_legacy_facade_impl(log_path))
+pub async fn make_real_facade(log_path: String) -> Result<impl CaligulaFacade, DaemonError> {
+    self::real::FacadeImpl::new(log_path).await
 }

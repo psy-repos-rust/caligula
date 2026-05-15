@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
-use futures::StreamExt;
+use futures::{StreamExt, TryStreamExt};
 
 use super::legacy_facade::{DaemonError, LegacyFacade};
 use crate::{
@@ -8,46 +8,64 @@ use crate::{
     facade::{
         DiskList, DiskWatcher, Escalator, FileAnalyzer, Orchestrator, WVState, WriteVerifyWorkflow,
         analyze_input::FileAnalysis,
+        child::{self, ChildHerderClient},
         watch::Watch,
         workflow::hash::{self, HashWorkflow, HashingState},
     },
+    herder_api::HerderService,
 };
 
 /// Actual CaligulaFacade implementation used by Caligula.
-pub struct FacadeImpl<H> {
-    inner: tokio::sync::Mutex<Inner<H>>,
+pub struct FacadeImpl {
+    inner: tokio::sync::Mutex<Inner>,
 }
 
-struct Inner<H> {
-    // TODO: get rid of the entire herder facade thing altogether. just assimilate the good parts
-    // into CaligulaFacade.
-    h: H,
-    escalation: Option<Option<EscalationMethod>>,
+struct Inner {
+    log_path: String,
+
+    child: ChildHerderClient,
+    escalated_child: Option<ChildHerderClient>,
 }
 
-impl<H> FacadeImpl<H> {
-    pub fn new(h: H) -> Self {
-        Self {
-            inner: Inner {
-                h,
-                escalation: None,
-            }
-            .into(),
+impl Inner {
+    fn pick_child_process(&self) -> &ChildHerderClient {
+        if let Some(c) = self.escalated_child.as_ref() {
+            c
+        } else {
+            &self.child
         }
     }
 }
 
-impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyWorkflow> for FacadeImpl<H> {
+impl FacadeImpl {
+    pub async fn new(log_path: String) -> Result<Self, DaemonError> {
+        let (child, fut) = super::child::spawn(log_path.clone(), false).await?;
+        tokio::task::spawn_local(fut);
+
+        Ok(Self {
+            inner: Inner {
+                log_path: log_path.into(),
+                child,
+                escalated_child: None,
+            }
+            .into(),
+        })
+    }
+}
+
+impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
     async fn start_workflow(&self, params: WriteVerifyWorkflow) -> Watch<WVState> {
         tracing::info!("Requesting herder to start");
 
-        // request the herder to start the action
-        let mut inner = self.inner.lock().await;
-        let esc = inner.escalation.is_some();
-        let handle: crate::facade::legacy_facade::HerdHandle<
-            crate::herder_api::write_verify::WriteVerifyEvent,
-        > = match inner.h.start_herd(params.make_child_config(), esc).await {
-            Ok(handle) => handle,
+        let inner = self.inner.lock().await;
+
+        let res = inner
+            .pick_child_process()
+            .start_writer(params.make_child_config())
+            .await;
+
+        let res = match res {
+            Ok(r) => r,
             Err(e) => {
                 // oh god what a shitshow
                 // TODO: refactor the shit out of this thing
@@ -66,45 +84,55 @@ impl<H: LegacyFacade + Send + 'static> Orchestrator<WriteVerifyWorkflow> for Fac
                                     daemon_error,
                                 ))
                             }
+                            crate::facade::StartWriterError::Comm(error) => {
+                                crate::facade::WriteVerifyWorkflowError::Comm(Arc::new(error))
+                            }
                         },
                     ))
                     .1,
                 };
             }
         };
-        drop(inner);
 
         // create state reduction task
         let (tx_state, rx_state) = tokio::sync::watch::channel(WVState::initial(
             Instant::now(),
             !params.compression.is_identity(),
-            handle.initial_info.input_file_bytes,
+            res.start.input_file_bytes,
         ));
-        let mut events = handle.events;
+
+        let mut events = res.events;
         let _jh = tokio::spawn(async move {
             while !tx_state.borrow().is_finished() && !tx_state.is_closed() {
-                let event = events.next().await;
+                let event = events.try_next().await;
                 tx_state.send_modify(move |state| {
                     *state = std::mem::take(state).on_status(Instant::now(), event);
                 });
             }
         });
+
         super::watch::Watch { rx: rx_state }
     }
 }
 
-impl<H: LegacyFacade + Send + 'static> Orchestrator<HashWorkflow> for FacadeImpl<H> {
+impl Orchestrator<HashWorkflow> for FacadeImpl {
     async fn start_workflow(&self, workflow: HashWorkflow) -> Watch<HashingState> {
         let (w, _jh) = hash::run(workflow).await;
         w
     }
 }
 
-impl<H: LegacyFacade> Escalator for FacadeImpl<H> {
-    async fn escalate(&self, method: Option<EscalationMethod>) -> Result<(), DaemonError> {
+impl Escalator for FacadeImpl {
+    async fn escalate(&self, _method: Option<EscalationMethod>) -> Result<(), DaemonError> {
+        // TODO respect escalation method choice
         let mut inner = self.inner.lock().await;
-        inner.escalation = Some(method);
-        inner.h.ensure_escalated_daemon().await?;
+        if inner.escalated_child.is_some() {
+            return Ok(());
+        }
+
+        let (child, fut) = super::child::spawn(inner.log_path.clone(), false).await?;
+        tokio::task::spawn_local(fut);
+        inner.escalated_child = Some(child);
         Ok(())
     }
 
@@ -114,11 +142,11 @@ impl<H: LegacyFacade> Escalator for FacadeImpl<H> {
         let Ok(lock) = self.inner.try_lock() else {
             return false;
         };
-        lock.escalation.is_some()
+        lock.escalated_child.is_some()
     }
 }
 
-impl<H> DiskWatcher for FacadeImpl<H> {
+impl DiskWatcher for FacadeImpl {
     fn watch_disks(&self) -> Watch<DiskList> {
         unimplemented!(
             "Until this is implemented, for testing purposes, you may replace this with test \
@@ -127,7 +155,7 @@ impl<H> DiskWatcher for FacadeImpl<H> {
     }
 }
 
-impl<H> FileAnalyzer for FacadeImpl<H> {
+impl FileAnalyzer for FacadeImpl {
     async fn analyze_file(&self, _input: PathBuf) -> std::io::Result<FileAnalysis> {
         unimplemented!(
             "Until this is implemented, for testing purposes, you may replace this with test \

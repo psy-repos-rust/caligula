@@ -7,7 +7,6 @@
 mod client;
 mod facade;
 
-pub use facade::make_legacy_facade_impl;
 use futures::stream::BoxStream;
 
 use crate::herder_api::{HerdAction, HerdEvent, TopLevelHerdEvent};
@@ -46,6 +45,8 @@ pub enum StartWriterError<E: HerdEvent> {
     Failed(E::Failure),
     #[error("Daemon management error: {0}")]
     DaemonError(#[from] DaemonError),
+    #[error("Communication error: {0}")]
+    Comm(std::io::Error),
 }
 
 #[derive(Debug, thiserror::Error)]

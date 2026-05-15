@@ -7,7 +7,7 @@ use crate::{
     byteseries::{ByteSeries, EstimatedTime},
     compression::CompressionFormat,
     device::WriteTarget,
-    facade::{DaemonError, workflow::WorkflowState},
+    facade::{DaemonError, StartWriterError, workflow::WorkflowState},
     herder_api::write_verify::*,
 };
 
@@ -73,10 +73,14 @@ pub enum WVState {
 pub enum WriteVerifyWorkflowError {
     #[error("Unexpected first event: {0:?}")]
     Unexpected(WriteVerifyEvent),
+    #[error("Communication error: {0}")]
+    Comm(Arc<std::io::Error>),
     #[error("Daemon management error: {0}")]
     Daemon(#[from] Arc<DaemonError>),
     #[error("Worker error: {0}")]
     Worker(#[from] LegacyWriteVerifyError),
+    #[error("Transport error: {0}")]
+    Transport(Arc<StartWriterError<WriteVerifyEvent>>), // TODO: change this type to be... better
     #[error("Orchestrator panicked!")]
     Panicked,
 }
@@ -119,7 +123,20 @@ impl WVState {
     }
 
     #[tracing::instrument(skip_all, fields(msg), level = "debug")]
-    pub fn on_status(mut self, now: Instant, msg: Option<WriteVerifyEvent>) -> Self {
+    pub fn on_status(
+        mut self,
+        now: Instant,
+        msg: Result<Option<WriteVerifyEvent>, StartWriterError<WriteVerifyEvent>>,
+    ) -> Self {
+        let msg = match msg {
+            Ok(msg) => msg,
+            Err(err) => {
+                info!("Error in transport");
+                return self
+                    .into_finished(now, Err(WriteVerifyWorkflowError::Transport(err.into())));
+            }
+        };
+
         match msg {
             Some(WriteVerifyEvent::TotalBytes { src, dest }) => {
                 trace!("Received total bytes notification");
@@ -308,15 +325,15 @@ mod tests {
         let s = WVState::initial(t0, false, 80)
             .on_status(
                 t0 + Duration::from_secs(1),
-                Some(WriteVerifyEvent::TotalBytes { src: 20, dest: 10 }),
+                Ok(Some(WriteVerifyEvent::TotalBytes { src: 20, dest: 10 })),
             )
             .on_status(
                 t0 + Duration::from_secs(2),
-                Some(WriteVerifyEvent::TotalBytes { src: 30, dest: 30 }),
+                Ok(Some(WriteVerifyEvent::TotalBytes { src: 30, dest: 30 })),
             )
             .on_status(
                 t0 + Duration::from_secs(3),
-                Some(WriteVerifyEvent::TotalBytes { src: 60, dest: 50 }),
+                Ok(Some(WriteVerifyEvent::TotalBytes { src: 60, dest: 50 })),
             );
 
         let s = match s {
@@ -332,7 +349,7 @@ mod tests {
         let t0 = Instant::now();
         let s = WVState::initial(t0, false, 400).on_status(
             t0 + Duration::from_secs(1),
-            Some(WriteVerifyEvent::TotalBytes { src: 15, dest: 40 }),
+            Ok(Some(WriteVerifyEvent::TotalBytes { src: 15, dest: 40 })),
         );
 
         let s = match s {
@@ -347,10 +364,10 @@ mod tests {
         let t0 = Instant::now();
         let s = WVState::initial(t0, true, 80).on_status(
             t0 + Duration::from_secs(1),
-            Some(WriteVerifyEvent::TotalBytes {
+            Ok(Some(WriteVerifyEvent::TotalBytes {
                 src: 20,
                 dest: 100000, // very big number to make errors obvious
-            }),
+            })),
         );
 
         let s = match s {
@@ -366,9 +383,9 @@ mod tests {
         let s = WVState::initial(t0, true, 80)
             .on_status(
                 t0 + Duration::from_secs(1),
-                Some(WriteVerifyEvent::TotalBytes { src: 20, dest: 20 }),
+                Ok(Some(WriteVerifyEvent::TotalBytes { src: 20, dest: 20 })),
             )
-            .on_status(t0 + Duration::from_secs(2), None);
+            .on_status(t0 + Duration::from_secs(2), Ok(None));
 
         match s {
             WVState::Finished {
@@ -401,7 +418,7 @@ mod tests {
         };
         let s1 = s0
             .clone()
-            .on_status(finish_time + Duration::from_secs(2), None);
+            .on_status(finish_time + Duration::from_secs(2), Ok(None));
 
         assert_eq!(s1, s0);
     }
@@ -419,7 +436,7 @@ mod tests {
         };
         let s1 = s0.clone().on_status(
             finish_time + Duration::from_secs(2),
-            Some(WriteVerifyEvent::FinishedWriting { verifying: false }),
+            Ok(Some(WriteVerifyEvent::FinishedWriting { verifying: false })),
         );
 
         assert_eq!(s1, s0);

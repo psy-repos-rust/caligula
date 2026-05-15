@@ -4,12 +4,32 @@
 //! The UI may speak some of these types, but it should prefer to use the
 //! higher-level interfaces defined in [`crate::facade`].
 
+pub mod client;
 pub mod error;
 pub mod write_verify;
 
-use std::fmt::{Debug, Display};
+use std::{
+    error::Error,
+    fmt::{Debug, Display},
+};
 
+use futures::stream::BoxStream;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+
+pub struct StartWriterResponse<E> {
+    pub start: WriteVerifyStart,
+    pub events: BoxStream<'static, Result<WriteVerifyEvent, E>>,
+}
+
+pub trait HerderService {
+    type Error: Error;
+
+    // TODO: make it support more than just writers
+    async fn start_writer(
+        &self,
+        action: WriteVerifyAction,
+    ) -> Result<StartWriterResponse<Self::Error>, Self::Error>;
+}
 
 /// Tell the herder to start a herd for performing an arbitrary action.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,3 +101,5 @@ macro_rules! impl_try_from_top_level_herd_event {
 }
 
 use impl_try_from_top_level_herd_event;
+
+use crate::herder_api::write_verify::{WriteVerifyAction, WriteVerifyEvent, WriteVerifyStart};
