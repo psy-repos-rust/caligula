@@ -4,8 +4,8 @@
 use std::path::PathBuf;
 
 pub use self::{
+    child::{DaemonError, StartWriterError},
     disks::DiskList,
-    legacy_facade::{DaemonError, StartWriterError},
     workflow::{
         Orchestrator, OrchestratorExt,
         write_verify::{WVState, WriteVerifyWorkflow, WriteVerifyWorkflowError},
@@ -19,7 +19,6 @@ use crate::{
 mod analyze_input;
 mod child;
 mod disks;
-mod legacy_facade;
 mod real;
 pub mod watch;
 pub mod workflow;

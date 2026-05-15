@@ -1,14 +1,13 @@
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
-use futures::{StreamExt, TryStreamExt};
+use futures::TryStreamExt;
 
-use super::legacy_facade::{DaemonError, LegacyFacade};
 use crate::{
     escalation::EscalationMethod,
     facade::{
         DiskList, DiskWatcher, Escalator, FileAnalyzer, Orchestrator, WVState, WriteVerifyWorkflow,
         analyze_input::FileAnalysis,
-        child::{self, ChildHerderClient},
+        child::{ChildHerderClient, DaemonError},
         watch::Watch,
         workflow::hash::{self, HashWorkflow, HashingState},
     },
@@ -44,7 +43,7 @@ impl FacadeImpl {
 
         Ok(Self {
             inner: Inner {
-                log_path: log_path.into(),
+                log_path,
                 child,
                 escalated_child: None,
             }

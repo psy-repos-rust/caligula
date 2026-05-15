@@ -4,14 +4,31 @@ use tokio::process::{Child, ChildStdin, ChildStdout};
 
 use crate::{
     escalation::run_escalate,
-    facade::DaemonError,
     herder_api::{
-        self, HerderService, StartWriterResponse, client::HerderClient,
+        self, HerdEvent, HerderService, StartWriterResponse, client::HerderClient,
         write_verify::WriteVerifyAction,
     },
 };
 
 type Client = HerderClient<ChildStdout, ChildStdin>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum StartWriterError<E: HerdEvent> {
+    #[error("Unexpected first status: {0:?}")]
+    UnexpectedFirstStatus(E),
+    #[error("Explicit error signaled: {0}")]
+    Failed(E::Failure),
+    #[error("Daemon management error: {0}")]
+    DaemonError(#[from] DaemonError),
+    #[error("Communication error: {0}")]
+    Comm(std::io::Error),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum DaemonError {
+    #[error("Failed to spawn daemon (escalated={0:?}): {1}")]
+    DaemonSpawnFailure(bool, anyhow::Error),
+}
 
 /// Spawn a child process.
 ///
