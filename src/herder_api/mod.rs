@@ -39,26 +39,23 @@ pub struct StartHerd<A> {
 
 /// Arbitrary herd initialization action. This can be anything, from writing to
 /// verifying to voiding.
-pub trait HerdAction:
-    Serialize + DeserializeOwned + Debug + Clone + PartialEq + Send + 'static
-{
-    type Start: Debug;
+pub trait HerdAction: Message {
+    type Start: Message;
 
     /// The events emitted by the herd afterwards.
     type Event: HerdEvent;
 }
 
-/// An event emitted by a running herd.
-pub trait HerdEvent:
-    Serialize
-    + DeserializeOwned
-    + Debug
-    + Clone
-    + PartialEq
-    + TryFrom<TopLevelHerdEvent, Error = TopLevelHerdEvent>
-    + Send
-    + 'static
+/// Trait alias for things we can work with on the wire or in RPC.
+pub trait Message:
+    Serialize + DeserializeOwned + Debug + Clone + PartialEq + Send + 'static
 {
+}
+
+impl<T: Serialize + DeserializeOwned + Debug + Clone + PartialEq + Send + 'static> Message for T {}
+
+/// An event emitted by a running herd.
+pub trait HerdEvent: Message + TryFrom<TopLevelHerdEvent, Error = TopLevelHerdEvent> {
     /// The initial information variant that it's expected to send out as soon
     /// as it has started running.
     type StartInfo: Debug;
