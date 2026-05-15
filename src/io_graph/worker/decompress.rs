@@ -76,6 +76,8 @@ impl<Rx: RecvBytes, Tx: SendBytes> Worker<(Rx, Tx)> for DecompressorWorker {
             tx.send(buf.freeze()).map_err(anyhow::Error::from)?;
         }
 
+        tx.close().map_err(anyhow::Error::from)?;
+
         Ok(())
     }
 }
