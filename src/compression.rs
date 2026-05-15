@@ -111,6 +111,7 @@ macro_rules! generate {
                 }
             }
 
+            #[expect(unused)]
             pub fn get_mut(&mut self) -> &mut R {
                 match self {
                     Self::Identity(r) => r,

@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 use crate::{
     benchmarking::{BenchContext, Benchmark, runner::BenchmarkParams},
     compression::CompressionFormat,
+    facade::workflow::{self, hash::HashWorkflow},
     hash::HashAlg,
-    legacy_io::do_file_hashing,
 };
 
 /// File read and hash calculation benchmark.
@@ -36,11 +36,17 @@ impl BenchmarkParams for HashBenchParams {
         let size = file.metadata().unwrap().len();
         ctx.set_progress_denominator(size);
 
-        Box::new(move |ctx: &BenchContext| {
-            do_file_hashing(file, this.compression, this.alg, |bs| {
-                ctx.log_progress(bs);
-            })
-            .unwrap();
+        Box::new(move |_: &BenchContext| {
+            let rt = tokio::runtime::LocalRuntime::new().unwrap();
+            rt.block_on(async move {
+                let (_, jh) = workflow::hash::run(HashWorkflow {
+                    file: this.input,
+                    alg: this.alg,
+                    compression: this.compression,
+                })
+                .await;
+                jh.unwrap().await.unwrap();
+            });
         })
     }
 }

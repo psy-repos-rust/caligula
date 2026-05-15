@@ -1,18 +1,29 @@
-use std::{fs::File, io::Seek, path::Path, process::exit};
+use std::{path::Path, process::exit, sync::Arc, time::Duration};
 
 use indicatif::{ProgressBar, ProgressStyle};
 use inquire::{Confirm, Select, Text};
 
 use crate::{
     compression::CompressionFormat,
+    facade::{
+        Orchestrator, OrchestratorExt,
+        workflow::{WorkflowState, hash::HashWorkflow},
+    },
     hash::{FileHashInfo, HashAlg, parse_hash_input},
     hashfile::{find_hash_in_standard_files, find_hash_in_user_file},
-    legacy_io::do_file_hashing,
+    runtime::RemoteSpawn,
     ui::cli::{BurnArgs, HashArg, HashOf},
 };
 
+const REFRESH_PERIOD: Duration = Duration::from_millis(250);
+
 #[tracing::instrument(skip_all, fields(cf))]
-pub fn ask_hash(args: &BurnArgs, cf: CompressionFormat) -> anyhow::Result<Option<FileHashInfo>> {
+pub fn ask_hash(
+    runtime: impl RemoteSpawn,
+    orc: Arc<impl Orchestrator<HashWorkflow> + Send + Sync + 'static>,
+    args: &BurnArgs,
+    cf: CompressionFormat,
+) -> anyhow::Result<Option<FileHashInfo>> {
     let hash_params = match (&args.hash, &args.hash_file) {
         (_, Some(hash_file)) => {
             let Some((algs, _, expected_hash)) = find_hash_in_user_file(&args.image, hash_file)
@@ -65,7 +76,7 @@ pub fn ask_hash(args: &BurnArgs, cf: CompressionFormat) -> anyhow::Result<Option
         return Ok(None);
     };
 
-    let hash_result = do_hashing(&args.image, &params)?;
+    let hash_result = do_hashing(runtime, orc, &args.image, &params)?;
 
     if hash_result.file_hash == params.expected_hash {
         eprintln!("Disk image verified successfully!");
@@ -181,21 +192,51 @@ fn ask_hasher_compression(
 }
 
 #[tracing::instrument(skip_all, fields(path))]
-fn do_hashing(path: &Path, params: &BeginHashParams) -> anyhow::Result<FileHashInfo> {
-    let mut file = File::open(path)?;
+fn do_hashing(
+    runtime: impl RemoteSpawn,
+    orc: Arc<impl Orchestrator<HashWorkflow> + Send + Sync + 'static>,
+    path: &Path,
+    params: &BeginHashParams,
+) -> anyhow::Result<FileHashInfo> {
+    let wf = HashWorkflow {
+        file: path.to_owned(),
+        alg: params.alg,
+        compression: params.hasher_compression,
+    };
 
-    // Calculate total file size
-    let file_size = file.seek(std::io::SeekFrom::End(0))?;
-    file.seek(std::io::SeekFrom::Start(0))?;
+    let result = runtime
+        .spawn(move || async move { orc.start_workflow_checked(wf).await })
+        .blocking_recv()
+        .expect("unexpectedly dropped!");
 
-    let progress_bar = ProgressBar::new(file_size);
+    let w = match result {
+        Ok(r) => r,
+        Err((_, err)) => Err(err)?,
+    };
+
+    let progress_bar = ProgressBar::new(w.borrow().file_size_bytes());
     progress_bar.set_style(
         ProgressStyle::with_template("{bytes:>10} / {total_bytes:<10} ({percent:^3}%) {wide_bar}")
             .unwrap(),
     );
 
-    do_file_hashing(file, params.hasher_compression, params.alg, |bytes| {
-        progress_bar.set_position(bytes)
+    let hash = loop {
+        {
+            let _span = tracing::debug_span!("polling hash state").entered();
+            let lock = w.borrow();
+            if let Some(r) = lock.result() {
+                break r.clone();
+            }
+            let bytes = lock.read_bytes_history().last_datapoint().1;
+            tracing::debug!(?bytes, "reached byte position");
+            progress_bar.set_position(bytes);
+        }
+
+        std::thread::sleep(REFRESH_PERIOD);
+    }?;
+
+    Ok(FileHashInfo {
+        file_hash: hash.into(),
     })
 }
 

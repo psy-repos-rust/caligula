@@ -106,7 +106,7 @@ fn init_tracing_subscriber(file: File) {
         .compact()
         .with_ansi(false) // hide colors
         .with_writer(Mutex::new(file))
-        .with_span_events(FmtSpan::FULL)
+        .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
         .with_env_filter(
             EnvFilter::builder()
                 .with_default_directive(FILE_LOG_LEVEL.into())
