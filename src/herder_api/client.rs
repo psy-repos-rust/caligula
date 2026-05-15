@@ -65,11 +65,13 @@ where
             .await
             .map_err(StartWriterError::Comm)?;
 
-        let mut stream = Box::pin(stream::unfold(rx, |mut rx| async move {
+        // pass tx through or else there will be unexpected EOFs from it closing.
+        // TODO: ... fix this thing ...
+        let mut stream = Box::pin(stream::unfold((tx, rx), |(tx, mut rx)| async move {
             let msg = read_msg_async::<(u64, TopLevelHerdEvent)>(&mut rx)
                 .await
                 .map_err(StartWriterError::Comm);
-            Some((msg.map(|(_, TopLevelHerdEvent::Writer(msg))| msg), rx))
+            Some((msg.map(|(_, TopLevelHerdEvent::Writer(msg))| msg), (tx, rx)))
         }));
 
         let first_msg = stream

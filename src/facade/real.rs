@@ -54,6 +54,7 @@ impl FacadeImpl {
 }
 
 impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
+    #[tracing::instrument(skip_all)]
     async fn start_workflow(&self, params: WriteVerifyWorkflow) -> Watch<WVState> {
         tracing::info!("Requesting herder to start");
 
@@ -107,6 +108,11 @@ impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
         let _jh = tokio::spawn(async move {
             while !tx_state.borrow().is_finished() && !tx_state.is_closed() {
                 let event = events.try_next().await;
+                if event.is_err() {
+                    tracing::error!(?event, "Got error event in response");
+                } else {
+                    tracing::trace!(?event, "Got event in response");
+                }
                 tx_state.send_modify(move |state| {
                     *state = std::mem::take(state).on_status(Instant::now(), event);
                 });
