@@ -189,7 +189,7 @@ async fn tracker_coroutine(
                 tracing::debug!("sending completion notification");
                 tx.send_modify(|s| {
                     s.read_bytes_history.push(Instant::now(), s.file_size_bytes);
-                    s.result = Some(r.map_err(|e| Arc::from(e)));
+                    s.result = Some(r.map_err(Arc::from));
                 });
                 return;
             }

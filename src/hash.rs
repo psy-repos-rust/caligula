@@ -1,4 +1,4 @@
-use std::{fmt::Display, io::Read};
+use std::fmt::Display;
 
 use base64::Engine;
 use digest::Digest;
@@ -61,66 +61,6 @@ macro_rules! generate {
                 }
             }
         }
-
-        /// Represents a hashing operation in progress.
-        /// This is mostly useful to make a cute progress bar.
-        pub struct Hashing<R>
-        where
-            R : Read,
-        {
-            inner: HashingInner<R>
-        }
-
-        enum HashingInner<R>
-        where
-            R : Read,
-        {
-            $($enum_arm(GenericHashing<$hash_inner, R>),)*
-        }
-
-        impl<R> Hashing<R>
-        where
-            R: Read,
-        {
-            #[inline]
-            pub fn new(alg: HashAlg, r: R, block_size: usize) -> Self {
-                let inner = match alg {
-                    $(HashAlg::$enum_arm => HashingInner::$enum_arm(
-                        GenericHashing::new(<$hash_inner as Digest>::new(), r, block_size)
-                    ),)*
-                };
-
-                Self { inner }
-            }
-
-            #[inline]
-            pub fn finalize(self) -> std::io::Result<FileHashInfo> {
-                match self.inner {
-                    $(HashingInner::$enum_arm(i) => i.finalize(),)*
-                }
-            }
-
-            #[inline]
-            pub fn get_reader_mut(&mut self) -> &mut R {
-                match &mut self.inner {
-                    $(HashingInner::$enum_arm(i) => i.get_reader_mut(),)*
-                }
-            }
-        }
-
-        impl<R> Iterator for Hashing<R>
-        where
-            R: Read,
-        {
-            type Item = usize;
-
-            #[inline]
-            fn next(&mut self) -> Option<Self::Item> {
-                match &mut self.inner {
-                    $(HashingInner::$enum_arm(i) => i.next(),)*
-                }
-            }
-        }
     }
 }
 
@@ -160,83 +100,6 @@ generate! {
     Sha512(::sha2::Sha512) {
         name: "sha512",
         display: "SHA-512",
-    }
-}
-
-/// Represents a hashing operation in progress.
-/// This is mostly useful to make a cute progress bar.
-struct GenericHashing<H, R>
-where
-    H: Digest,
-    R: Read,
-{
-    hash: H,
-    read: R,
-    len: usize,
-    buf: Vec<u8>,
-    error: Option<std::io::Error>,
-}
-
-impl<H, R> GenericHashing<H, R>
-where
-    H: Digest,
-    R: Read,
-{
-    pub fn new(hash: H, read: R, block_size: usize) -> Self {
-        Self {
-            hash,
-            read,
-            len: 0,
-            buf: vec![0; block_size],
-            error: None,
-        }
-    }
-
-    pub fn get_reader_mut(&mut self) -> &mut R {
-        &mut self.read
-    }
-
-    pub fn finalize(self) -> std::io::Result<FileHashInfo> {
-        match self.error {
-            Some(e) => Err(e),
-            None => Ok(FileHashInfo {
-                file_hash: self.hash.finalize()[..].into(),
-            }),
-        }
-    }
-
-    /// Performs one step. Returns how many bytes were read.
-    /// Does not set the "failed" flag.
-    fn step(&mut self) -> std::io::Result<usize> {
-        let read_bytes = self.read.read(&mut self.buf)?;
-        if read_bytes > 0 {
-            self.hash.update(&self.buf[..read_bytes]);
-        }
-        self.len += read_bytes;
-        Ok(read_bytes)
-    }
-}
-
-impl<H, R> Iterator for GenericHashing<H, R>
-where
-    H: Digest,
-    R: Read,
-{
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.error.is_some() {
-            return None;
-        }
-
-        match self.step() {
-            Ok(0) => None,
-            Ok(_) => Some(self.len),
-            Err(e) => {
-                self.error = Some(e);
-                None
-            }
-        }
     }
 }
 

@@ -1,12 +1,9 @@
-use std::{
-    io::{BufReader, Read},
-    marker::PhantomData,
-};
+use std::{io::Read, marker::PhantomData};
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 
 use crate::{
-    compression::{CompressionFormat, DecompressRead, decompress},
+    compression::{CompressionFormat, decompress},
     io_graph::{GraphContext, RecvBytes, SendBytes, Worker, util::RecvBytesReader},
 };
 
@@ -40,10 +37,11 @@ impl<Rx: RecvBytes, Tx: SendBytes> Worker<(Rx, Tx)> for DecompressorWorker {
 
     fn run(
         self: Box<Self>,
-        context: &GraphContext,
+        _context: &GraphContext,
         (rx, mut tx): (Rx, Tx),
     ) -> Result<Self::Output, Self::Error> {
-        // Strategy is to read this decompressor into an intermediate BytesMut, then send off the bytes chunk-by-chunk.
+        // Strategy is to read this decompressor into an intermediate BytesMut, then
+        // send off the bytes chunk-by-chunk.
         let mut read = decompress(self.cf, RecvBytesReader::from(rx))?;
         let mut reader_empty = false;
 
@@ -51,7 +49,8 @@ impl<Rx: RecvBytes, Tx: SendBytes> Worker<(Rx, Tx)> for DecompressorWorker {
             // set up a new buffer
             let mut buf = BytesMut::with_capacity(self.read_size);
 
-            // SAFETY: these bytes will get filled up immediately. everything else that wasn't filled up will get truncated
+            // SAFETY: these bytes will get filled up immediately. everything else that
+            // wasn't filled up will get truncated
             unsafe {
                 buf.set_len(self.read_size);
             }
@@ -59,7 +58,7 @@ impl<Rx: RecvBytes, Tx: SendBytes> Worker<(Rx, Tx)> for DecompressorWorker {
             // fill up the buffer as much as possible
             let mut cursor = buf.as_mut();
             while !reader_empty && !cursor.is_empty() {
-                let count = read.read(&mut cursor).map_err(anyhow::Error::from)?;
+                let count = read.read(cursor).map_err(anyhow::Error::from)?;
 
                 if count == 0 {
                     // 0 bytes means EOF

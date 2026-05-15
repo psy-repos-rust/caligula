@@ -25,16 +25,12 @@ pub struct JunctionTracker {
 #[derive(Default)]
 struct Inner {
     q: Queue<(u32, TransferStat)>,
-    e: Option<std::io::Error>,
 }
 
 impl JunctionTracker {
     pub fn new() -> Self {
         Self {
-            transfers: RwLock::new(Inner {
-                q: Queue::new(),
-                e: None,
-            }),
+            transfers: RwLock::new(Inner { q: Queue::new() }),
             next_id: 0.into(),
         }
     }
@@ -110,6 +106,7 @@ impl TransferStat {
     }
 
     /// How long this transfer took.
+    #[expect(unused)]
     pub fn duration(&self) -> Duration {
         self.ended() - self.started()
     }
@@ -122,6 +119,7 @@ impl TransferStat {
     }
 
     /// Whether this operation was successful or a failure.
+    #[expect(unused)]
     pub fn success(&self) -> bool {
         self.bytes != 0
     }
@@ -135,10 +133,12 @@ pub struct RecvJunction<'a, Rx: RecvBytes> {
 }
 
 impl<'a, Rx: RecvBytes> RecvJunction<'a, Rx> {
+    #[expect(unused)]
     pub fn new(recv: Rx, junction: Junction<'a>) -> Self {
         Self { recv, junction }
     }
 
+    #[expect(unused)]
     pub fn junction(&self) -> &Junction<'a> {
         &self.junction
     }
@@ -173,6 +173,7 @@ impl<'a, Tx: SendBytes> SendJunction<'a, Tx> {
         Self { send, junction }
     }
 
+    #[expect(unused)]
     pub fn junction(&self) -> &Junction<'a> {
         &self.junction
     }

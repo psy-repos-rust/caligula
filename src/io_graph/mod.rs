@@ -4,11 +4,12 @@ use std::{
 };
 
 use bytes::Bytes;
-use serde::{Serialize, de::DeserializeOwned};
 
+#[expect(unused)]
+pub use crate::io_graph::junction::{Junction, RecvJunction};
 pub use crate::io_graph::{
     buf::buf,
-    junction::{Junction, JunctionTracker, RecvJunction, SendJunction},
+    junction::{JunctionTracker, SendJunction},
 };
 
 mod buf;
@@ -16,17 +17,8 @@ mod junction;
 pub mod util;
 pub mod worker;
 
-/// A [`Node`] is an object in the I/O graph connected to other objects.
-#[must_use]
-pub trait Node<'a> {
-    /// Extra information this node adds to a [`NodeInfo`].
-    type Info: Serialize + DeserializeOwned + 'static;
-
-    /// Generate the information about this node.
-    fn info(&self) -> NodeInfo<'a, Self::Info>;
-}
-
-/// A worker thread ready to be moved onto a thread and started with the given [`Args`].
+/// A worker thread ready to be moved onto a thread and started with the given
+/// [`Args`].
 #[must_use]
 pub trait Worker<Args>: Send {
     /// Final, successful value computed by this [`Worker`].
@@ -71,18 +63,4 @@ pub trait RecvBytes {
     /// Try to receive some [`Bytes`]. If it returns `None`, there are no more
     /// bytes to be read. Blocks until result is received.
     fn recv(&mut self) -> std::io::Result<Option<Bytes>>;
-}
-
-/// Information associated with a [`Node`]
-pub struct NodeInfo<'a, T> {
-    pub extra: T,
-    pub inputs: Vec<Junction<'a>>,
-    pub outputs: Vec<Junction<'a>>,
-}
-
-/// Information associated with a [`Node`]
-pub struct NodeData<T> {
-    pub extra: T,
-    pub inputs: Vec<u32>,
-    pub outputs: Vec<u32>,
 }
