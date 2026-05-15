@@ -94,6 +94,8 @@ impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
             }
         };
 
+        tracing::info!(?res.start, "Got initial info from client");
+
         // create state reduction task
         let (tx_state, rx_state) = tokio::sync::watch::channel(WVState::initial(
             Instant::now(),
@@ -130,7 +132,7 @@ impl Escalator for FacadeImpl {
             return Ok(());
         }
 
-        let (child, fut) = super::child::spawn(inner.log_path.clone(), false).await?;
+        let (child, fut) = super::child::spawn(inner.log_path.clone(), true).await?;
         tokio::task::spawn_local(fut);
         inner.escalated_child = Some(child);
         Ok(())

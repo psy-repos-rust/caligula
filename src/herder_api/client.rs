@@ -4,7 +4,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use crate::{
     facade::StartWriterError,
     herder_api::{
-        HerdEvent as _, HerderService, StartHerd, StartWriterResponse,
+        HerdEvent as _, HerderService, StartHerd, StartWriterResponse, TopLevelHerdEvent,
         write_verify::{WriteVerifyAction, WriteVerifyEvent},
     },
     ipc_common::{read_msg_async, write_msg_async},
@@ -66,10 +66,10 @@ where
             .map_err(StartWriterError::Comm)?;
 
         let mut stream = Box::pin(stream::unfold(rx, |mut rx| async move {
-            let msg = read_msg_async::<WriteVerifyEvent>(&mut rx)
+            let msg = read_msg_async::<(u64, TopLevelHerdEvent)>(&mut rx)
                 .await
                 .map_err(StartWriterError::Comm);
-            Some((msg, rx))
+            Some((msg.map(|(_, TopLevelHerdEvent::Writer(msg))| msg), rx))
         }));
 
         let first_msg = stream
