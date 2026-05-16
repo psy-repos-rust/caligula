@@ -19,11 +19,11 @@ use super::cli::BurnArgs;
 use crate::{
     device::WriteTarget,
     facade::{
-        CaligulaFacade, DaemonError, Orchestrator, WVState, WriteVerifyWorkflow,
+        CaligulaFacade, Orchestrator, SpawnDaemonError, WVState, WriteVerifyWorkflow,
         watch::Watch,
         workflow::{hash::HashWorkflow, write_verify::WriteVerifyWorkflowError},
     },
-    herder_api::{error::DiskError, write_verify::LegacyWriteVerifyError},
+    herder_api::{error::DiskError, write_verify::WVError},
     logging::LogPaths,
     runtime::RemoteSpawn,
     ui::cli::UseSudo,
@@ -71,7 +71,7 @@ pub enum WriteOrEscalateError {
     #[error("Error spawning writer: {0}")]
     Write(#[from] Arc<WriteVerifyWorkflowError>),
     #[error("Error escalating: {0}")]
-    Escalate(#[from] DaemonError),
+    Escalate(#[from] SpawnDaemonError),
     #[error("Not allowed to escalate")]
     NotAllowedToEscalate,
 }
@@ -102,9 +102,7 @@ pub fn try_start_write_or_escalate(
 
     match err.as_ref() {
         WriteVerifyWorkflowError::Worker(e) => match e {
-            LegacyWriteVerifyError::OutputFile(e)
-                if e.kind() == Some(&DiskError::PermissionDenied) =>
-            {
+            WVError::OutputFile(e) if e.kind() == Some(&DiskError::PermissionDenied) => {
                 request_escalation(runtime, facade.clone(), root, interactive, args)?;
                 Ok(facade.start_write_verify_blocking(runtime, args.clone())?)
             }

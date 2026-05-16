@@ -4,7 +4,7 @@ use rand::{SeedableRng, rngs::SmallRng};
 use rstest::*;
 
 use self::helpers::*;
-use crate::herder_api::write_verify::{LegacyWriteVerifyError, WriteVerifyEvent};
+use crate::herder_api::write_verify::{WVError, WVEvent};
 
 #[test]
 fn write_op_works_with_emitted_events() {
@@ -30,23 +30,23 @@ fn write_op_works_with_emitted_events() {
     assert_eq!(
         &result.events,
         &[
-            WriteVerifyEvent::TotalBytes {
+            WVEvent::TotalBytes {
                 src: 1024,
                 dest: 256
             },
-            WriteVerifyEvent::TotalBytes {
+            WVEvent::TotalBytes {
                 src: 1024,
                 dest: 512
             },
-            WriteVerifyEvent::TotalBytes {
+            WVEvent::TotalBytes {
                 src: 1024,
                 dest: 768
             },
-            WriteVerifyEvent::TotalBytes {
+            WVEvent::TotalBytes {
                 src: 1024,
                 dest: 1024
             },
-            WriteVerifyEvent::TotalBytes {
+            WVEvent::TotalBytes {
                 src: 1024,
                 dest: 1024
             },
@@ -77,7 +77,7 @@ fn write_misaligned_file_works(
 
 #[rstest]
 fn write_file_larger_than_disk(#[values(1032, 2000, 6000, 7000)] file_size: usize) {
-    use crate::herder_api::write_verify::LegacyWriteVerifyError;
+    use crate::herder_api::write_verify::WVError;
 
     let test = WriteTest {
         file_size,
@@ -89,10 +89,7 @@ fn write_file_larger_than_disk(#[values(1032, 2000, 6000, 7000)] file_size: usiz
     };
     let result = test.execute(false);
 
-    assert_matches!(
-        result.execute_result,
-        Err(LegacyWriteVerifyError::EndOfOutput)
-    );
+    assert_matches!(result.execute_result, Err(WVError::EndOfOutput));
     assert_eq!(&result.disk, &result.file[..test.disk_size]);
 }
 
@@ -200,10 +197,7 @@ fn verify_sad_case_works() {
     };
     let result = test.execute();
 
-    assert_eq!(
-        result.return_val,
-        Err(LegacyWriteVerifyError::VerificationFailed)
-    );
+    assert_eq!(result.return_val, Err(WVError::VerificationFailed));
 }
 
 #[rstest]
@@ -250,10 +244,7 @@ fn verify_misaligned_case_sad_path_works(#[case] file_size: usize, #[case] flip_
     };
     let result = test.execute();
 
-    assert_eq!(
-        result.return_val,
-        Err(LegacyWriteVerifyError::VerificationFailed)
-    );
+    assert_eq!(result.return_val, Err(WVError::VerificationFailed));
 }
 
 /// Helpers for these tests. These go in their own little module to enforce
@@ -367,8 +358,8 @@ mod helpers {
         pub requested_writes: Vec<Vec<u8>>,
         pub file: Vec<u8>,
         pub disk: Vec<u8>,
-        pub events: Vec<WriteVerifyEvent>,
-        pub execute_result: Result<u64, LegacyWriteVerifyError>,
+        pub events: Vec<WVEvent>,
+        pub execute_result: Result<u64, WVError>,
     }
 
     impl WriteTest {
@@ -424,8 +415,8 @@ mod helpers {
     pub struct VerifyTestResult {
         pub _requested_file_reads: Vec<usize>,
         pub _requested_disk_reads: Vec<usize>,
-        pub _events: Vec<WriteVerifyEvent>,
-        pub return_val: Result<(), LegacyWriteVerifyError>,
+        pub _events: Vec<WVEvent>,
+        pub return_val: Result<(), WVError>,
     }
 
     impl VerifyTest {

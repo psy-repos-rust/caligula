@@ -9,8 +9,8 @@ use tracing::info;
 use tracing_unwrap::ResultExt;
 
 use crate::{
-    herder_api::{StartHerd, TopLevelHerdEvent, write_verify::WriteVerifyAction},
-    ipc_common::{read_msg_async, write_msg},
+    herder_api::write_verify::{WVAction, WVError, WVEvent},
+    ipc_common::read_msg_async,
     runtime::RemoteSpawn as _,
 };
 
@@ -26,22 +26,30 @@ pub fn main() {
 
 async fn async_main() {
     loop {
-        let msg = match read_msg_async::<StartHerd<WriteVerifyAction>>(tokio::io::stdin()).await {
-            Ok(d) => d,
+        // TODO: multiplex and support multiple action types
+        let action = match read_msg_async::<WVAction>(tokio::io::stdin()).await {
+            Ok(a) => a,
             Err(e) => {
                 tracing::info!("Error received on stdin, quitting: {e}");
                 return;
             }
         };
-        info!(?msg, "Received StartAction request");
+        info!(?action, "Received WVAction request");
 
         let child = writer_process::spawn_writer(
-            msg.id,
             move |m| {
-                write_msg(std::io::stdout(), &(msg.id, TopLevelHerdEvent::from(m))).ok_or_log();
+                crate::ipc_common::write_msg(std::io::stdout(), &Ok::<_, WVError>(m)).ok_or_log();
             },
-            msg.action,
+            move |m| {
+                write_event(&m).ok_or_log();
+            },
+            action,
         );
         info!(?child, "Spawned writer thread");
     }
+}
+
+/// Typed wrapper around [`crate::ipc_common::write_msg`].
+fn write_event(m: &Result<WVEvent, WVError>) -> Result<(), std::io::Error> {
+    crate::ipc_common::write_msg(std::io::stdout(), m)
 }

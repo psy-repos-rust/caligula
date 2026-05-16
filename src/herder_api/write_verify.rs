@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::HerdAction;
+use super::HerderAction;
 use crate::{
     compression::CompressionFormat,
     device::Type,
@@ -10,7 +10,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WriteVerifyAction {
+pub struct WVAction {
     pub dest: PathBuf,
     pub src: PathBuf,
     pub verify: bool,
@@ -19,13 +19,14 @@ pub struct WriteVerifyAction {
     pub block_size: Option<u64>,
 }
 
-impl HerdAction for WriteVerifyAction {
-    type Event = WriteVerifyEvent;
+impl HerderAction for WVAction {
+    type Error = WVError;
+    type Event = WVEvent;
+    type Start = WVStart;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum WriteVerifyEvent {
-    InitSuccess(WriteVerifyStart),
+pub enum WVEvent {
     TotalBytes {
         src: u64,
         dest: u64,
@@ -40,37 +41,15 @@ pub enum WriteVerifyEvent {
         duration_millis: u64,
     },
     Success,
-    Error(LegacyWriteVerifyError),
-}
-
-super::impl_try_from_top_level_herd_event!(Writer => WriteVerifyEvent);
-
-impl super::HerdEvent for WriteVerifyEvent {
-    type Failure = LegacyWriteVerifyError;
-    type StartInfo = WriteVerifyStart;
-
-    fn downcast_as_initial_info(self) -> Result<Self::StartInfo, Self> {
-        match self {
-            WriteVerifyEvent::InitSuccess(e) => Ok(e),
-            other => Err(other),
-        }
-    }
-
-    fn downcast_as_failure(self) -> Result<Self::Failure, Self> {
-        match self {
-            WriteVerifyEvent::Error(e) => Ok(e),
-            other => Err(other),
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WriteVerifyStart {
+pub struct WVStart {
     pub input_file_bytes: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
-pub enum LegacyWriteVerifyError {
+pub enum WVError {
     #[error("Unexpected end of output file. Is your output file too small?")]
     EndOfOutput,
     #[error("Unknown error occurred in child process: {0}")]

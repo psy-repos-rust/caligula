@@ -6,6 +6,7 @@ use tracing::debug;
 use crate::{
     facade::make_real_facade,
     logging::{ErrorContext, crash_and_burn},
+    runtime::RemoteSpawn as _,
 };
 
 mod benchmarking;
@@ -70,8 +71,16 @@ fn main() {
             let log_paths = logging::LogPaths::init(&state_dir);
             let error_context = logging::init_logging_parent(&log_paths);
 
+            let log_path = log_paths.main().to_owned();
             let runtime = crate::runtime::AsyncRuntime::start();
-            let facade = Arc::new(make_real_facade(log_paths.main()));
+
+            let facade = Arc::new(
+                runtime
+                    .spawn(move || async move { make_real_facade(log_path).await })
+                    .blocking_recv()
+                    .expect("unexpectedly dropped!")
+                    .expect("Failed to initialize backend!"),
+            );
 
             debug!("Starting primary process");
             match ui::main(runtime, facade, log_paths.into(), burn_args) {

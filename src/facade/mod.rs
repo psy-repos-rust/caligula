@@ -4,8 +4,8 @@
 use std::path::PathBuf;
 
 pub use self::{
+    child::{ClientTransportError, SpawnDaemonError},
     disks::DiskList,
-    legacy_facade::{DaemonError, StartWriterError},
     workflow::{
         Orchestrator, OrchestratorExt,
         write_verify::{WVState, WriteVerifyWorkflow, WriteVerifyWorkflowError},
@@ -17,46 +17,43 @@ use crate::{
 };
 
 mod analyze_input;
+mod child;
 mod disks;
-mod legacy_facade;
 mod real;
 pub mod watch;
 pub mod workflow;
 
-/// Main facade for UI implementations to interact with the rest of the
-/// program's logic.
-///
-/// This trait is split up into several subtraits, each representing a different
-/// kind of action the UI can take.
-///
-/// The API for this can be considered "mostly" stable. I'll be changing out the
-/// error types, but in general, the overall shape of this API can be used for
-/// new UI developments.
-pub trait CaligulaFacade:
-    Sync
-    + Send
-    + DiskWatcher
-    + FileAnalyzer
-    + Escalator
-    + Orchestrator<WriteVerifyWorkflow>
-    + Orchestrator<HashWorkflow>
-    + 'static
-{
+/// Helper to generate our facade definition based on a list of traits it
+/// combines.
+macro_rules! gen_facade {
+    ($($traits:path,)*) => {
+        /// Main facade for UI implementations to interact with the rest of the
+        /// program's logic.
+        ///
+        /// This trait is split up into several subtraits, each representing a different
+        /// kind of shared action the UI can take.
+        pub trait CaligulaFacade:
+            Sync + Send + 'static $(+ $traits)*
+        {
+        }
+
+
+        impl<F> CaligulaFacade for F where
+            F: Sync + Send + 'static $(+ $traits)*
+        {
+        }
+    };
 }
 
-impl<F> CaligulaFacade for F where
-    F: Sync
-        + Send
-        + DiskWatcher
-        + FileAnalyzer
-        + Escalator
-        + Orchestrator<WriteVerifyWorkflow>
-        + Orchestrator<HashWorkflow>
-        + 'static
-{
-}
+gen_facade!(
+    DiskWatcher,
+    FileAnalyzer,
+    Escalator,
+    Orchestrator<WriteVerifyWorkflow>,
+    Orchestrator<HashWorkflow>,
+);
 
-/// Represents an interface to the disk querying subsystem.
+// Represents an interface to the disk querying subsystem.
 pub trait DiskWatcher {
     /// Get a handle for watching the list of disks available. This may update
     /// as disks are added and removed to the system.
@@ -90,8 +87,8 @@ pub trait Escalator {
     /// method (or [`None`] to automatically guess which one to use).
     ///
     /// Returns [`Ok`] if we successfully managed to escalate, or an error if we
-    /// failed. If we were already escalated before this was called, returns
-    /// [`Ok`].
+    /// failed. This operation is idempotent: if we were already escalated
+    /// before this was called, returns [`Ok`].
     ///
     /// Once this is called, all future workflows will be routed through the
     /// escalated child process rather than executing at the parent's
@@ -99,7 +96,7 @@ pub trait Escalator {
     ///
     /// If your requested method involves the terminal, you should switch back
     /// to the non-alternate screen before calling this.
-    async fn escalate(&self, method: Option<EscalationMethod>) -> Result<(), DaemonError>;
+    async fn escalate(&self, method: Option<EscalationMethod>) -> Result<(), SpawnDaemonError>;
 
     /// Returns whether or not we have a child process running as root.
     #[expect(unused, reason = "Stub interface created for later use.")]
@@ -107,6 +104,6 @@ pub trait Escalator {
 }
 
 /// Make the actual prod-used CaligulaFacade implementation.
-pub fn make_real_facade(log_path: &str) -> impl CaligulaFacade {
-    self::real::FacadeImpl::new(legacy_facade::make_legacy_facade_impl(log_path))
+pub async fn make_real_facade(log_path: String) -> Result<impl CaligulaFacade, SpawnDaemonError> {
+    self::real::FacadeImpl::new(log_path).await
 }
