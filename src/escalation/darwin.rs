@@ -5,7 +5,7 @@ use super::{
 
 pub async fn wrap_osascript_escalation(
     raw: &Command<'_>,
-    modify: impl FnOnce(&mut tokio::process::Command) -> (),
+    modify: impl FnOnce(&mut tokio::process::Command),
 ) -> Result<tokio::process::Child, EscalationError> {
     for _ in 0..3 {
         // User-friendly thing that lets you use touch ID if you wanted.
@@ -32,5 +32,5 @@ pub async fn wrap_osascript_escalation(
 
     let mut cmd: tokio::process::Command = EscalationMethod::Sudo.wrap_command(raw).into();
     modify(&mut cmd);
-    Ok(cmd.spawn().map_err(EscalationError::SpawnFailure)?)
+    cmd.spawn().map_err(EscalationError::SpawnFailure)
 }

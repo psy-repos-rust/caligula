@@ -25,6 +25,7 @@ mod legacy_io;
 mod logging;
 mod native;
 mod runtime;
+mod stdiomux;
 mod tty;
 mod ui;
 mod util;
