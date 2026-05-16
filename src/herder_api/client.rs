@@ -63,11 +63,11 @@ where
 
         write_msg_async(&mut tx, &StartHerd { id: 0, action })
             .await
-            .map_err(ClientTransportError::Comm)?;
+            .map_err(ClientTransportError::Tx)?;
 
         let first_msg = read_msg_async::<Result<A::Start, A::Error>>(&mut rx)
             .await
-            .map_err(ClientTransportError::Comm)?;
+            .map_err(ClientTransportError::Rx)?;
 
         let start = match first_msg {
             Ok(start) => start,
@@ -79,7 +79,7 @@ where
         let events = Box::pin(stream::unfold((tx, rx), |(tx, mut rx)| async move {
             let val = read_msg_async::<Result<A::Event, A::Error>>(&mut rx)
                 .await
-                .map_err(ClientTransportError::Comm);
+                .map_err(ClientTransportError::Rx);
             Some((val, (tx, rx)))
         }));
 

@@ -6,8 +6,9 @@ use crate::{
     escalation::EscalationMethod,
     facade::{
         DiskList, DiskWatcher, Escalator, FileAnalyzer, Orchestrator, WVState, WriteVerifyWorkflow,
+        WriteVerifyWorkflowError,
         analyze_input::FileAnalysis,
-        child::{ChildHerderClient, DaemonError},
+        child::{ChildHerderClient, SpawnDaemonError},
         watch::Watch,
         workflow::hash::{self, HashWorkflow, HashingState},
     },
@@ -37,7 +38,7 @@ impl Inner {
 }
 
 impl FacadeImpl {
-    pub async fn new(log_path: String) -> Result<Self, DaemonError> {
+    pub async fn new(log_path: String) -> Result<Self, SpawnDaemonError> {
         let (child, fut) = super::child::spawn(log_path.clone(), false).await?;
         tokio::task::spawn_local(fut);
 
@@ -67,32 +68,19 @@ impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
         let res = match res {
             Ok(Ok(r)) => r,
             Ok(Err(e)) => {
-                // oh god what a shitshow
-                // TODO: refactor the shit out of this thing
                 return Watch {
                     rx: tokio::sync::watch::channel(WVState::error(
                         Instant::now(),
-                        crate::facade::WriteVerifyWorkflowError::Worker(e),
+                        WriteVerifyWorkflowError::Worker(e),
                     ))
                     .1,
                 };
             }
             Err(e) => {
-                // oh god what a shitshow
-                // TODO: refactor the shit out of this thing
                 return Watch {
                     rx: tokio::sync::watch::channel(WVState::error(
                         Instant::now(),
-                        match e {
-                            crate::facade::ClientTransportError::DaemonError(daemon_error) => {
-                                crate::facade::WriteVerifyWorkflowError::Daemon(Arc::new(
-                                    daemon_error,
-                                ))
-                            }
-                            crate::facade::ClientTransportError::Comm(error) => {
-                                crate::facade::WriteVerifyWorkflowError::Comm(Arc::new(error))
-                            }
-                        },
+                        Arc::new(e).into(),
                     ))
                     .1,
                 };
@@ -131,7 +119,7 @@ impl Orchestrator<HashWorkflow> for FacadeImpl {
 }
 
 impl Escalator for FacadeImpl {
-    async fn escalate(&self, _method: Option<EscalationMethod>) -> Result<(), DaemonError> {
+    async fn escalate(&self, _method: Option<EscalationMethod>) -> Result<(), SpawnDaemonError> {
         // TODO respect escalation method choice
         let mut inner = self.inner.lock().await;
         if inner.escalated_child.is_some() {

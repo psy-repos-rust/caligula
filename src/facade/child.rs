@@ -3,7 +3,7 @@ use std::process::Stdio;
 use tokio::process::{Child, ChildStdin, ChildStdout};
 
 use crate::{
-    escalation::run_escalate,
+    escalation::{EscalationError, run_escalate},
     herder_api::{
         self, HerderResponse, HerderService,
         client::HerderClient,
@@ -16,15 +16,39 @@ type Client = HerderClient<ChildStdout, ChildStdin>;
 #[derive(Debug, thiserror::Error)]
 pub enum ClientTransportError {
     #[error("Daemon management error: {0}")]
-    DaemonError(#[from] DaemonError),
-    #[error("Communication error: {0}")]
-    Comm(std::io::Error),
+    DaemonError(#[from] SpawnDaemonError),
+    #[error("Error receiving a message: {0}")]
+    Rx(std::io::Error),
+    #[error("Error sending a message: {0}")]
+    Tx(std::io::Error),
+}
+
+impl PartialEq for ClientTransportError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::DaemonError(l0), Self::DaemonError(r0)) => l0 == r0,
+            (Self::Rx(_), Self::Rx(_)) => true,
+            (Self::Tx(_), Self::Tx(_)) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum DaemonError {
-    #[error("Failed to spawn daemon (escalated={0:?}): {1}")]
-    DaemonSpawnFailure(bool, anyhow::Error),
+pub enum SpawnDaemonError {
+    #[error("Failed to spawn escalated: {0}")]
+    Escalation(#[from] EscalationError),
+    #[error("Failed to spawn unescalated: {0}")]
+    Standard(std::io::Error),
+}
+
+impl PartialEq for SpawnDaemonError {
+    fn eq(&self, other: &Self) -> bool {
+        matches!(
+            (self, other),
+            (Self::Escalation(_), Self::Escalation(_)) | (Self::Standard(_), Self::Standard(_))
+        )
+    }
 }
 
 /// Spawn a child process.
@@ -40,7 +64,7 @@ pub async fn spawn(
         ChildHerderClient,
         impl Future<Output = Result<(), std::io::Error>>,
     ),
-    DaemonError,
+    SpawnDaemonError,
 > {
     let proc = process_path::get_executable_path().unwrap();
     let cmd = crate::escalation::Command {
@@ -60,12 +84,11 @@ pub async fn spawn(
     let mut child = match escalated {
         true => run_escalate(&cmd, modify_cmd)
             .await
-            .map_err(|e| DaemonError::DaemonSpawnFailure(true, e.into()))?,
+            .map_err(SpawnDaemonError::Escalation)?,
         false => {
             let mut c = tokio::process::Command::from(cmd);
             modify_cmd(&mut c);
-            c.spawn()
-                .map_err(|e| DaemonError::DaemonSpawnFailure(false, e.into()))?
+            c.spawn().map_err(SpawnDaemonError::Standard)?
         }
     };
 

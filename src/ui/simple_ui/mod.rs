@@ -19,7 +19,7 @@ use super::cli::BurnArgs;
 use crate::{
     device::WriteTarget,
     facade::{
-        CaligulaFacade, DaemonError, Orchestrator, WVState, WriteVerifyWorkflow,
+        CaligulaFacade, Orchestrator, SpawnDaemonError, WVState, WriteVerifyWorkflow,
         watch::Watch,
         workflow::{hash::HashWorkflow, write_verify::WriteVerifyWorkflowError},
     },
@@ -71,7 +71,7 @@ pub enum WriteOrEscalateError {
     #[error("Error spawning writer: {0}")]
     Write(#[from] Arc<WriteVerifyWorkflowError>),
     #[error("Error escalating: {0}")]
-    Escalate(#[from] DaemonError),
+    Escalate(#[from] SpawnDaemonError),
     #[error("Not allowed to escalate")]
     NotAllowedToEscalate,
 }

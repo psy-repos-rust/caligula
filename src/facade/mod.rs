@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 pub use self::{
-    child::{ClientTransportError, DaemonError},
+    child::{ClientTransportError, SpawnDaemonError},
     disks::DiskList,
     workflow::{
         Orchestrator, OrchestratorExt,
@@ -99,7 +99,7 @@ pub trait Escalator {
     ///
     /// If your requested method involves the terminal, you should switch back
     /// to the non-alternate screen before calling this.
-    async fn escalate(&self, method: Option<EscalationMethod>) -> Result<(), DaemonError>;
+    async fn escalate(&self, method: Option<EscalationMethod>) -> Result<(), SpawnDaemonError>;
 
     /// Returns whether or not we have a child process running as root.
     #[expect(unused, reason = "Stub interface created for later use.")]
@@ -107,6 +107,6 @@ pub trait Escalator {
 }
 
 /// Make the actual prod-used CaligulaFacade implementation.
-pub async fn make_real_facade(log_path: String) -> Result<impl CaligulaFacade, DaemonError> {
+pub async fn make_real_facade(log_path: String) -> Result<impl CaligulaFacade, SpawnDaemonError> {
     self::real::FacadeImpl::new(log_path).await
 }

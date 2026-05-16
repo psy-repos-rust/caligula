@@ -7,7 +7,7 @@ use crate::{
     byteseries::{ByteSeries, EstimatedTime},
     compression::CompressionFormat,
     device::WriteTarget,
-    facade::{ClientTransportError, DaemonError, workflow::WorkflowState},
+    facade::{ClientTransportError, workflow::WorkflowState},
     herder_api::write_verify::*,
 };
 
@@ -69,28 +69,14 @@ pub enum WVState {
     },
 }
 
-#[derive(Debug, Clone, thiserror::Error)]
+#[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum WriteVerifyWorkflowError {
-    #[error("Communication error: {0}")]
-    Comm(Arc<std::io::Error>),
-    #[error("Daemon management error: {0}")]
-    Daemon(#[from] Arc<DaemonError>),
     #[error("Worker error: {0}")]
     Worker(#[from] WVError),
     #[error("Transport error: {0}")]
-    Transport(Arc<ClientTransportError>),
+    Transport(#[from] Arc<ClientTransportError>),
     #[error("Orchestrator panicked!")]
     Panicked,
-}
-
-impl PartialEq for WriteVerifyWorkflowError {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Daemon(_), Self::Daemon(_)) => true,
-            (Self::Worker(l0), Self::Worker(r0)) => l0 == r0,
-            _ => false,
-        }
-    }
 }
 
 impl WorkflowState for WVState {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     escalation::EscalationMethod,
     facade::{
-        CaligulaFacade, DaemonError, OrchestratorExt, WVState, WriteVerifyWorkflow,
+        CaligulaFacade, OrchestratorExt, SpawnDaemonError, WVState, WriteVerifyWorkflow,
         WriteVerifyWorkflowError, watch::Watch,
     },
     runtime::RemoteSpawn,
@@ -42,7 +42,7 @@ pub trait FacadeExt: CaligulaFacade + OrchestratorExt<WriteVerifyWorkflow> {
         self: Arc<Self>,
         spawn: impl RemoteSpawn,
         method: Option<EscalationMethod>,
-    ) -> Result<(), DaemonError> {
+    ) -> Result<(), SpawnDaemonError> {
         spawn
             .spawn(move || async move { self.escalate(method).await })
             .blocking_recv()
