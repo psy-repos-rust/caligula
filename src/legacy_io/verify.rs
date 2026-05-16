@@ -6,7 +6,7 @@ use crate::{
     compression::CompressionFormat,
     herder_api::{
         error::{DiskError, InputFileError, IoError},
-        write_verify::{LegacyWriteVerifyError, WriteVerifyEvent},
+        write_verify::{WVError, WVEvent},
     },
     legacy_io::utils::{CountRead, FileSourceReader, try_read_exact},
 };
@@ -36,10 +36,7 @@ pub struct VerifyOp<S: Read, D: Read> {
 
 impl<S: Read, D: Read> VerifyOp<S, D> {
     #[inline(always)]
-    pub fn execute(
-        &mut self,
-        mut tx: impl FnMut(WriteVerifyEvent),
-    ) -> Result<(), LegacyWriteVerifyError> {
+    pub fn execute(&mut self, mut tx: impl FnMut(WVEvent)) -> Result<(), WVError> {
         let mut file = FileSourceReader::new(self.cf, self.file_read_buf_size, &mut self.file);
         let mut disk = CountRead::new(&mut self.disk);
 
@@ -48,7 +45,7 @@ impl<S: Read, D: Read> VerifyOp<S, D> {
 
         macro_rules! checkpoint {
             () => {
-                tx(WriteVerifyEvent::TotalBytes {
+                tx(WVEvent::TotalBytes {
                     src: file.read_file_bytes(),
                     dest: disk.count(),
                 });
@@ -68,7 +65,7 @@ impl<S: Read, D: Read> VerifyOp<S, D> {
 
                 if file_buf[..file_read_bytes] != disk_buf[..file_read_bytes] {
                     tracing::warn!(file_read_bytes, "verification failed");
-                    return Err(LegacyWriteVerifyError::VerificationFailed);
+                    return Err(WVError::VerificationFailed);
                 }
             }
             checkpoint!();

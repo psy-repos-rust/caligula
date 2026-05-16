@@ -5,19 +5,16 @@ use tokio::process::{Child, ChildStdin, ChildStdout};
 use crate::{
     escalation::run_escalate,
     herder_api::{
-        self, HerdEvent, HerderResponse, HerderService, client::HerderClient,
-        write_verify::WriteVerifyAction,
+        self, HerderResponse, HerderService,
+        client::HerderClient,
+        write_verify::{WVAction, WVError},
     },
 };
 
 type Client = HerderClient<ChildStdout, ChildStdin>;
 
 #[derive(Debug, thiserror::Error)]
-pub enum StartWriterError<E: HerdEvent> {
-    #[error("Unexpected first status: {0:?}")]
-    UnexpectedFirstStatus(E),
-    #[error("Explicit error signaled: {0}")]
-    Failed(E::Failure),
+pub enum ClientTransportError {
     #[error("Daemon management error: {0}")]
     DaemonError(#[from] DaemonError),
     #[error("Communication error: {0}")]
@@ -93,13 +90,13 @@ pub struct ChildHerderClient {
     client: Client,
 }
 
-impl HerderService<WriteVerifyAction> for ChildHerderClient {
-    type Error = <Client as HerderService<WriteVerifyAction>>::Error;
+impl HerderService<WVAction> for ChildHerderClient {
+    type Error = <Client as HerderService<WVAction>>::Error;
 
     async fn start(
         &self,
-        action: WriteVerifyAction,
-    ) -> Result<HerderResponse<WriteVerifyAction, Self::Error>, Self::Error> {
+        action: WVAction,
+    ) -> Result<Result<HerderResponse<WVAction, Self::Error>, WVError>, Self::Error> {
         self.client.start(action).await
     }
 }

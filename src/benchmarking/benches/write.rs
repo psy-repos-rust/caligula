@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     benchmarking::{BenchContext, Benchmark, runner::BenchmarkParams},
     compression::CompressionFormat,
-    herder_api::write_verify::WriteVerifyEvent,
+    herder_api::write_verify::WVEvent,
     legacy_io::{WriteOp, open_blockdev},
 };
 
@@ -57,7 +57,7 @@ impl BenchmarkParams for WriteBench {
                 file_read_buf_size: this.file_read_buf_size,
             }
             .execute(|e| {
-                if let WriteVerifyEvent::TotalBytes { src, .. } = e {
+                if let WVEvent::TotalBytes { src, .. } = e {
                     ctx.log_progress(src);
                 }
             })

@@ -7,7 +7,7 @@ use crate::{
     byteseries::{ByteSeries, EstimatedTime},
     compression::CompressionFormat,
     device::WriteTarget,
-    facade::{DaemonError, StartWriterError, workflow::WorkflowState},
+    facade::{ClientTransportError, DaemonError, workflow::WorkflowState},
     herder_api::write_verify::*,
 };
 
@@ -39,8 +39,8 @@ impl WriteVerifyWorkflow {
         })
     }
 
-    pub fn make_child_config(&self) -> WriteVerifyAction {
-        WriteVerifyAction {
+    pub fn make_child_config(&self) -> WVAction {
+        WVAction {
             dest: self.target.devnode.clone(),
             src: self.input_file.clone(),
             verify: true,
@@ -71,16 +71,14 @@ pub enum WVState {
 
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum WriteVerifyWorkflowError {
-    #[error("Unexpected first event: {0:?}")]
-    Unexpected(WriteVerifyEvent),
     #[error("Communication error: {0}")]
     Comm(Arc<std::io::Error>),
     #[error("Daemon management error: {0}")]
     Daemon(#[from] Arc<DaemonError>),
     #[error("Worker error: {0}")]
-    Worker(#[from] LegacyWriteVerifyError),
+    Worker(#[from] WVError),
     #[error("Transport error: {0}")]
-    Transport(Arc<StartWriterError<WriteVerifyEvent>>), // TODO: change this type to be... better
+    Transport(Arc<ClientTransportError>),
     #[error("Orchestrator panicked!")]
     Panicked,
 }
@@ -123,11 +121,18 @@ impl WVState {
     }
 
     #[tracing::instrument(skip_all, fields(msg), level = "debug")]
-    pub fn on_status(
-        mut self,
+    pub fn on_response(
+        self,
         now: Instant,
-        msg: Result<Option<WriteVerifyEvent>, StartWriterError<WriteVerifyEvent>>,
+        msg: Option<Result<Result<WVEvent, WVError>, ClientTransportError>>,
     ) -> Self {
+        // peel off EOF
+        let Some(msg) = msg else {
+            info!("Messages terminated unexpectedly");
+            return self.into_finished(now, Err(WVError::UnexpectedTermination.into()));
+        };
+
+        // peel off transport errors
         let msg = match msg {
             Ok(msg) => msg,
             Err(err) => {
@@ -137,33 +142,36 @@ impl WVState {
             }
         };
 
-        match msg {
-            Some(WriteVerifyEvent::TotalBytes { src, dest }) => {
+        // peel off application errors
+        let msg = match msg {
+            Ok(msg) => msg,
+            Err(err) => {
+                tracing::error!(?err, "Received error notification");
+                return self.into_finished(now, Err(err.into()));
+            }
+        };
+
+        // now we handle normal application messages
+        self.on_event(now, msg)
+    }
+
+    pub fn on_event(mut self, now: Instant, event: WVEvent) -> Self {
+        match event {
+            WVEvent::TotalBytes { src, dest } => {
                 trace!("Received total bytes notification");
                 self.on_total_bytes(now, src, dest);
                 self
             }
-            Some(WriteVerifyEvent::FinishedWriting { verifying }) => {
+            WVEvent::FinishedWriting { verifying } => {
                 info!("Received finished writing notification");
                 match self {
                     WVState::Writing(st) => st.into_finished(now, verifying),
                     c => c,
                 }
             }
-            Some(WriteVerifyEvent::Error(reason)) => {
-                info!("Received error notification");
-                self.into_finished(now, Err(reason.into()))
-            }
-            Some(WriteVerifyEvent::Success) => {
+            WVEvent::Success => {
                 info!("Received success notification");
                 self.into_finished(now, Ok(()))
-            }
-            None => {
-                info!("Messages terminated unexpectedly");
-                self.into_finished(
-                    now,
-                    Err(LegacyWriteVerifyError::UnexpectedTermination.into()),
-                )
             }
             other => panic!(
                 "Received unexpected child status {:#?}\nCurrent state: {:#?}",
@@ -323,17 +331,17 @@ mod tests {
     fn accept_total_bytes_messages() {
         let t0 = Instant::now();
         let s = WVState::initial(t0, false, 80)
-            .on_status(
+            .on_event(
                 t0 + Duration::from_secs(1),
-                Ok(Some(WriteVerifyEvent::TotalBytes { src: 20, dest: 10 })),
+                WVEvent::TotalBytes { src: 20, dest: 10 },
             )
-            .on_status(
+            .on_event(
                 t0 + Duration::from_secs(2),
-                Ok(Some(WriteVerifyEvent::TotalBytes { src: 30, dest: 30 })),
+                WVEvent::TotalBytes { src: 30, dest: 30 },
             )
-            .on_status(
+            .on_event(
                 t0 + Duration::from_secs(3),
-                Ok(Some(WriteVerifyEvent::TotalBytes { src: 60, dest: 50 })),
+                WVEvent::TotalBytes { src: 60, dest: 50 },
             );
 
         let s = match s {
@@ -347,9 +355,9 @@ mod tests {
     #[test]
     fn writing_value_for_uncompressed_ratio() {
         let t0 = Instant::now();
-        let s = WVState::initial(t0, false, 400).on_status(
+        let s = WVState::initial(t0, false, 400).on_event(
             t0 + Duration::from_secs(1),
-            Ok(Some(WriteVerifyEvent::TotalBytes { src: 15, dest: 40 })),
+            WVEvent::TotalBytes { src: 15, dest: 40 },
         );
 
         let s = match s {
@@ -362,12 +370,12 @@ mod tests {
     #[test]
     fn writing_value_for_compressed_ratio() {
         let t0 = Instant::now();
-        let s = WVState::initial(t0, true, 80).on_status(
+        let s = WVState::initial(t0, true, 80).on_event(
             t0 + Duration::from_secs(1),
-            Ok(Some(WriteVerifyEvent::TotalBytes {
+            WVEvent::TotalBytes {
                 src: 20,
                 dest: 100000, // very big number to make errors obvious
-            })),
+            },
         );
 
         let s = match s {
@@ -381,11 +389,11 @@ mod tests {
     fn sudden_terminate_in_writing_state_sets_error() {
         let t0 = Instant::now();
         let s = WVState::initial(t0, true, 80)
-            .on_status(
+            .on_event(
                 t0 + Duration::from_secs(1),
-                Ok(Some(WriteVerifyEvent::TotalBytes { src: 20, dest: 20 })),
+                WVEvent::TotalBytes { src: 20, dest: 20 },
             )
-            .on_status(t0 + Duration::from_secs(2), Ok(None));
+            .on_response(t0 + Duration::from_secs(2), None);
 
         match s {
             WVState::Finished {
@@ -394,12 +402,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(finish_time - t0, Duration::from_secs(2));
-                assert_eq!(
-                    error,
-                    Err(Arc::new(
-                        LegacyWriteVerifyError::UnexpectedTermination.into()
-                    ))
-                );
+                assert_eq!(error, Err(Arc::new(WVError::UnexpectedTermination.into())));
             }
             s => panic!("Unexpected {s:#?}"),
         }
@@ -418,7 +421,7 @@ mod tests {
         };
         let s1 = s0
             .clone()
-            .on_status(finish_time + Duration::from_secs(2), Ok(None));
+            .on_response(finish_time + Duration::from_secs(2), None);
 
         assert_eq!(s1, s0);
     }
@@ -434,9 +437,9 @@ mod tests {
             verify_hist: None,
             total_write_bytes: 12345678,
         };
-        let s1 = s0.clone().on_status(
+        let s1 = s0.clone().on_event(
             finish_time + Duration::from_secs(2),
-            Ok(Some(WriteVerifyEvent::FinishedWriting { verifying: false })),
+            WVEvent::FinishedWriting { verifying: false },
         );
 
         assert_eq!(s1, s0);

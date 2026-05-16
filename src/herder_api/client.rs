@@ -1,12 +1,9 @@
-use futures::{StreamExt, stream};
+use futures::stream;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
-    facade::StartWriterError,
-    herder_api::{
-        HerdEvent as _, HerderResponse, HerderService, StartHerd, TopLevelHerdEvent,
-        write_verify::{WriteVerifyAction, WriteVerifyEvent},
-    },
+    facade::ClientTransportError,
+    herder_api::{HerderAction, HerderResponse, HerderService, StartHerd},
     ipc_common::{read_msg_async, write_msg_async},
 };
 
@@ -45,54 +42,47 @@ where
     comm: std::sync::Mutex<Option<(R, W)>>,
 }
 
-impl<R, W> HerderService<WriteVerifyAction> for HerderClient<R, W>
+impl<A, R, W> HerderService<A> for HerderClient<R, W>
 where
+    A: HerderAction,
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    type Error = StartWriterError<WriteVerifyEvent>;
+    type Error = ClientTransportError;
 
     async fn start(
         &self,
-        action: WriteVerifyAction,
-    ) -> Result<HerderResponse<WriteVerifyAction, Self::Error>, Self::Error> {
-        let (rx, mut tx) =
+        action: A,
+    ) -> Result<Result<HerderResponse<A, Self::Error>, A::Error>, Self::Error> {
+        // TODO: implement multiplexing
+
+        let (mut rx, mut tx) =
             self.comm.lock().unwrap().take().expect(
                 "called more than once! multiple requests are not currently supported! sowwy!",
             );
 
         write_msg_async(&mut tx, &StartHerd { id: 0, action })
             .await
-            .map_err(StartWriterError::Comm)?;
+            .map_err(ClientTransportError::Comm)?;
+
+        let first_msg = read_msg_async::<Result<A::Start, A::Error>>(&mut rx)
+            .await
+            .map_err(ClientTransportError::Comm)?;
+
+        let start = match first_msg {
+            Ok(start) => start,
+            Err(err) => return Ok(Err(err)),
+        };
 
         // pass tx through or else there will be unexpected EOFs from it closing.
         // TODO: ... fix this thing ...
-        let mut stream = Box::pin(stream::unfold((tx, rx), |(tx, mut rx)| async move {
-            let msg = read_msg_async::<(u64, TopLevelHerdEvent)>(&mut rx)
+        let events = Box::pin(stream::unfold((tx, rx), |(tx, mut rx)| async move {
+            let val = read_msg_async::<Result<A::Event, A::Error>>(&mut rx)
                 .await
-                .map_err(StartWriterError::Comm);
-            Some((msg.map(|(_, TopLevelHerdEvent::Writer(msg))| msg), (tx, rx)))
+                .map_err(ClientTransportError::Comm);
+            Some((val, (tx, rx)))
         }));
 
-        let first_msg = stream
-            .next()
-            .await
-            .ok_or(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                "didn't get a response from the server",
-            ))
-            .map_err(StartWriterError::Comm)??;
-
-        let initial_info = first_msg.downcast_as_initial_info().map_err(|other| {
-            match other.downcast_as_failure() {
-                Ok(error) => StartWriterError::Failed(error),
-                Err(other) => StartWriterError::UnexpectedFirstStatus(other),
-            }
-        })?;
-
-        Ok(HerderResponse {
-            start: initial_info,
-            events: stream,
-        })
+        Ok(Ok(HerderResponse { start, events }))
     }
 }

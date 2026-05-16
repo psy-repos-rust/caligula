@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 pub use self::{
-    child::{DaemonError, StartWriterError},
+    child::{ClientTransportError, DaemonError},
     disks::DiskList,
     workflow::{
         Orchestrator, OrchestratorExt,

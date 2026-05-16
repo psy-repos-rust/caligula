@@ -1,6 +1,6 @@
 use std::{path::PathBuf, sync::Arc, time::Instant};
 
-use futures::TryStreamExt;
+use futures::StreamExt;
 
 use crate::{
     escalation::EscalationMethod,
@@ -65,7 +65,18 @@ impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
             .await;
 
         let res = match res {
-            Ok(r) => r,
+            Ok(Ok(r)) => r,
+            Ok(Err(e)) => {
+                // oh god what a shitshow
+                // TODO: refactor the shit out of this thing
+                return Watch {
+                    rx: tokio::sync::watch::channel(WVState::error(
+                        Instant::now(),
+                        crate::facade::WriteVerifyWorkflowError::Worker(e),
+                    ))
+                    .1,
+                };
+            }
             Err(e) => {
                 // oh god what a shitshow
                 // TODO: refactor the shit out of this thing
@@ -73,18 +84,12 @@ impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
                     rx: tokio::sync::watch::channel(WVState::error(
                         Instant::now(),
                         match e {
-                            crate::facade::StartWriterError::UnexpectedFirstStatus(s) => {
-                                crate::facade::WriteVerifyWorkflowError::Unexpected(s)
-                            }
-                            crate::facade::StartWriterError::Failed(f) => {
-                                crate::facade::WriteVerifyWorkflowError::Worker(f)
-                            }
-                            crate::facade::StartWriterError::DaemonError(daemon_error) => {
+                            crate::facade::ClientTransportError::DaemonError(daemon_error) => {
                                 crate::facade::WriteVerifyWorkflowError::Daemon(Arc::new(
                                     daemon_error,
                                 ))
                             }
-                            crate::facade::StartWriterError::Comm(error) => {
+                            crate::facade::ClientTransportError::Comm(error) => {
                                 crate::facade::WriteVerifyWorkflowError::Comm(Arc::new(error))
                             }
                         },
@@ -106,14 +111,10 @@ impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
         let mut events = res.events;
         let _jh = tokio::spawn(async move {
             while !tx_state.borrow().is_finished() && !tx_state.is_closed() {
-                let event = events.try_next().await;
-                if event.is_err() {
-                    tracing::error!(?event, "Got error event in response");
-                } else {
-                    tracing::trace!(?event, "Got event in response");
-                }
+                let event = events.next().await;
+
                 tx_state.send_modify(move |state| {
-                    *state = std::mem::take(state).on_status(Instant::now(), event);
+                    *state = std::mem::take(state).on_response(Instant::now(), event);
                 });
             }
         });

@@ -6,7 +6,7 @@ use crate::{
     compression::CompressionFormat,
     herder_api::{
         error::{DiskError, InputFileError, IoError},
-        write_verify::{LegacyWriteVerifyError, WriteVerifyEvent},
+        write_verify::{WVError, WVEvent},
     },
     legacy_io::utils::{CountWrite, FileSourceReader, try_read_exact},
 };
@@ -36,17 +36,14 @@ pub struct WriteOp<S: Read, D: Write> {
 impl<S: Read, D: Write> WriteOp<S, D> {
     /// Execute the write operation. Returns total number of bytes written.
     #[inline(always)]
-    pub fn execute(
-        &mut self,
-        mut tx: impl FnMut(WriteVerifyEvent),
-    ) -> Result<u64, LegacyWriteVerifyError> {
+    pub fn execute(&mut self, mut tx: impl FnMut(WVEvent)) -> Result<u64, WVError> {
         let mut file = FileSourceReader::new(self.cf, self.file_read_buf_size, &mut self.file);
         let mut disk = CountWrite::new(&mut self.disk);
         let mut buf = avec_rt![[self.disk_block_size] | 0u8; self.buf_size];
 
         macro_rules! checkpoint {
             () => {
-                tx(WriteVerifyEvent::TotalBytes {
+                tx(WVEvent::TotalBytes {
                     src: file.read_file_bytes(),
                     dest: disk.count(),
                 });
@@ -70,7 +67,7 @@ impl<S: Read, D: Write> WriteOp<S, D> {
                 let written_bytes = disk.write(&buf[..]).map_err(IoError::<DiskError>::from)?;
                 if written_bytes == 0 {
                     checkpoint!();
-                    return Err(LegacyWriteVerifyError::EndOfOutput);
+                    return Err(WVError::EndOfOutput);
                 }
             }
             checkpoint!();

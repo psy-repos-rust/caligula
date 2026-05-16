@@ -31,29 +31,29 @@ const CHECKPOINT_BYTES: usize = 8 * (1 << 20); // 8MiB
 
 pub fn spawn_writer(
     id: u64,
-    mut tx: impl FnMut(WriteVerifyEvent) + Send + 'static,
-    init_config: WriteVerifyAction,
+    tx_start: impl FnOnce(WVStart) + Send + 'static,
+    mut tx: impl FnMut(Result<WVEvent, WVError>) + Send + 'static,
+    init_config: WVAction,
 ) -> JoinHandle<()> {
     std::thread::Builder::new()
         .name(format!("writer/{id}"))
         .spawn(move || {
             debug!("Spawned child thread {:?}", std::thread::current().id());
+            let borrowed = &mut tx;
+            let result =
+                run(tx_start, move |x| borrowed(Ok(x)), &init_config).map(|_| WVEvent::Success);
 
-            let final_msg = match run(&mut tx, &init_config) {
-                Ok(_) => WriteVerifyEvent::Success,
-                Err(e) => WriteVerifyEvent::Error(e),
-            };
-
-            info!(?final_msg, "Completed");
-            tx(final_msg);
+            info!(?result, "Thread terminated");
+            tx(result);
         })
         .unwrap()
 }
 
 fn run(
-    mut tx: impl FnMut(WriteVerifyEvent),
-    args: &WriteVerifyAction,
-) -> Result<(), LegacyWriteVerifyError> {
+    tx_start: impl FnOnce(WVStart) + Send + 'static,
+    mut tx: impl FnMut(WVEvent),
+    args: &WVAction,
+) -> Result<(), WVError> {
     if cfg!(target_os = "macos") && args.target_type == device::Type::Disk {
         run_diskutil_umount(args).map_err(UnmountError::Diskutil)?;
     }
@@ -83,9 +83,9 @@ fn run(
         }
     });
 
-    tx(WriteVerifyEvent::InitSuccess(WriteVerifyStart {
+    tx_start(WVStart {
         input_file_bytes: size,
-    }));
+    });
 
     let bs = match args.block_size {
         Some(bs) => bs,
@@ -108,7 +108,7 @@ fn run(
     }
     .execute(&mut tx)?;
 
-    tx(WriteVerifyEvent::FinishedWriting {
+    tx(WVEvent::FinishedWriting {
         verifying: args.verify,
     });
 
@@ -149,7 +149,7 @@ fn run(
 }
 
 /// Raw routine to execute `diskutil unmountdisk` on MacOS.
-fn run_diskutil_umount(args: &WriteVerifyAction) -> Result<(), CommandError> {
+fn run_diskutil_umount(args: &WVAction) -> Result<(), CommandError> {
     let mut command = Command::new("diskutil");
     command
         .arg("unmountdisk")
