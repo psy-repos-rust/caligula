@@ -11,7 +11,7 @@ pub mod write_verify;
 use std::{error::Error, fmt::Debug};
 
 use futures::stream::BoxStream;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Serialize, de::DeserializeOwned};
 
 pub struct HerderResponse<A: HerderAction, E> {
     pub start: A::Start,
@@ -32,16 +32,6 @@ pub trait HerderService<A: HerderAction> {
         &self,
         action: A,
     ) -> Result<Result<HerderResponse<A, Self::Error>, A::Error>, Self::Error>;
-}
-
-/// Tell the herder to start a herd for performing an arbitrary action.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StartHerd<A> {
-    /// ID to associate with all of the herd's events
-    pub id: u64,
-
-    /// The action to perform
-    pub action: A,
 }
 
 /// Arbitrary herd initialization action. This can be anything, from writing to

@@ -3,7 +3,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     facade::ClientTransportError,
-    herder_api::{HerderAction, HerderResponse, HerderService, StartHerd},
+    herder_api::{HerderAction, HerderResponse, HerderService},
     ipc_common::{read_msg_async, write_msg_async},
 };
 
@@ -61,7 +61,8 @@ where
                 "called more than once! multiple requests are not currently supported! sowwy!",
             );
 
-        write_msg_async(&mut tx, &StartHerd { id: 0, action })
+        // TODO multiplex this
+        write_msg_async(&mut tx, &action)
             .await
             .map_err(ClientTransportError::Tx)?;
 

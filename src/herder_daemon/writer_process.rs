@@ -30,13 +30,12 @@ const MAX_BUF_SIZE: usize = 1 << 20; // 1MiB
 const CHECKPOINT_BYTES: usize = 8 * (1 << 20); // 8MiB
 
 pub fn spawn_writer(
-    id: u64,
     tx_start: impl FnOnce(WVStart) + Send + 'static,
     mut tx: impl FnMut(Result<WVEvent, WVError>) + Send + 'static,
     init_config: WVAction,
 ) -> JoinHandle<()> {
     std::thread::Builder::new()
-        .name(format!("writer/{id}"))
+        .name("writer".into())
         .spawn(move || {
             debug!("Spawned child thread {:?}", std::thread::current().id());
             let borrowed = &mut tx;

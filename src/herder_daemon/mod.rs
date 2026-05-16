@@ -9,10 +9,7 @@ use tracing::info;
 use tracing_unwrap::ResultExt;
 
 use crate::{
-    herder_api::{
-        StartHerd,
-        write_verify::{WVAction, WVError, WVEvent},
-    },
+    herder_api::write_verify::{WVAction, WVError, WVEvent},
     ipc_common::read_msg_async,
     runtime::RemoteSpawn as _,
 };
@@ -29,24 +26,24 @@ pub fn main() {
 
 async fn async_main() {
     loop {
-        let msg = match read_msg_async::<StartHerd<WVAction>>(tokio::io::stdin()).await {
-            Ok(d) => d,
+        // TODO: multiplex and support multiple action types
+        let action = match read_msg_async::<WVAction>(tokio::io::stdin()).await {
+            Ok(a) => a,
             Err(e) => {
                 tracing::info!("Error received on stdin, quitting: {e}");
                 return;
             }
         };
-        info!(?msg, "Received StartAction request");
+        info!(?action, "Received WVAction request");
 
         let child = writer_process::spawn_writer(
-            msg.id,
             move |m| {
                 crate::ipc_common::write_msg(std::io::stdout(), &Ok::<_, WVError>(m)).ok_or_log();
             },
             move |m| {
                 write_event(&m).ok_or_log();
             },
-            msg.action,
+            action,
         );
         info!(?child, "Spawned writer thread");
     }
