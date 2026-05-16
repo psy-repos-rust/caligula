@@ -23,40 +23,37 @@ mod real;
 pub mod watch;
 pub mod workflow;
 
-/// Main facade for UI implementations to interact with the rest of the
-/// program's logic.
-///
-/// This trait is split up into several subtraits, each representing a different
-/// kind of action the UI can take.
-///
-/// The API for this can be considered "mostly" stable. I'll be changing out the
-/// error types, but in general, the overall shape of this API can be used for
-/// new UI developments.
-pub trait CaligulaFacade:
-    Sync
-    + Send
-    + DiskWatcher
-    + FileAnalyzer
-    + Escalator
-    + Orchestrator<WriteVerifyWorkflow>
-    + Orchestrator<HashWorkflow>
-    + 'static
-{
+/// Helper to generate our facade definition based on a list of traits it
+/// combines.
+macro_rules! gen_facade {
+    ($($traits:path,)*) => {
+        /// Main facade for UI implementations to interact with the rest of the
+        /// program's logic.
+        ///
+        /// This trait is split up into several subtraits, each representing a different
+        /// kind of shared action the UI can take.
+        pub trait CaligulaFacade:
+            Sync + Send + 'static $(+ $traits)*
+        {
+        }
+
+
+        impl<F> CaligulaFacade for F where
+            F: Sync + Send + 'static $(+ $traits)*
+        {
+        }
+    };
 }
 
-impl<F> CaligulaFacade for F where
-    F: Sync
-        + Send
-        + DiskWatcher
-        + FileAnalyzer
-        + Escalator
-        + Orchestrator<WriteVerifyWorkflow>
-        + Orchestrator<HashWorkflow>
-        + 'static
-{
-}
+gen_facade!(
+    DiskWatcher,
+    FileAnalyzer,
+    Escalator,
+    Orchestrator<WriteVerifyWorkflow>,
+    Orchestrator<HashWorkflow>,
+);
 
-/// Represents an interface to the disk querying subsystem.
+// Represents an interface to the disk querying subsystem.
 pub trait DiskWatcher {
     /// Get a handle for watching the list of disks available. This may update
     /// as disks are added and removed to the system.
