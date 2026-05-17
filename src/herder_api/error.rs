@@ -15,7 +15,7 @@ pub enum LayerError<App, Trans> {
 
 /// Given a [`Result`] with [`LayerError`]s, eliminate the [`LayerError`]s by
 /// rotating the application-level errors into the [`Ok`].
-pub fn rotate_layer_errors<T, App, Trans>(
+pub fn rotate_layer_error<T, App, Trans>(
     res: Result<T, LayerError<App, Trans>>,
 ) -> Result<Result<T, App>, Trans> {
     match res {

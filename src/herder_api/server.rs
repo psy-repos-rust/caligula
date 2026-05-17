@@ -7,7 +7,7 @@ use futures::{Stream, StreamExt, TryStreamExt as _, stream};
 use crate::{
     herder_api::{
         HerderAction, HerderResponse, HerderService, LayerError, bincode_options,
-        error::rotate_layer_errors,
+        error::rotate_layer_error,
     },
     stdiomux::{self, BytestreamService},
 };
@@ -92,7 +92,7 @@ fn serialize_response<A: HerderAction, Trans>(
         Err(e) => (Err(e), None),
     };
 
-    let first = rotate_layer_errors(first).map(|msg| {
+    let first = rotate_layer_error(first).map(|msg| {
         Bytes::from_owner(
             bincode_options()
                 .serialize(&msg)
@@ -109,7 +109,7 @@ fn serialize_response<A: HerderAction, Trans>(
 fn serialize_events<A: HerderAction, Trans>(
     res: impl Stream<Item = Result<A::Event, LayerError<A::Error, Trans>>> + Unpin,
 ) -> impl Stream<Item = Result<Bytes, Trans>> + Unpin {
-    res.map(|res| rotate_layer_errors(res)).map_ok(|msg| {
+    res.map(|res| rotate_layer_error(res)).map_ok(|msg| {
         Bytes::from_owner(
             bincode_options()
                 .serialize(&msg)
