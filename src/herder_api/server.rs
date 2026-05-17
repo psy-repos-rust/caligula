@@ -5,7 +5,9 @@ use bytes::Bytes;
 use futures::{Stream, StreamExt, TryStreamExt as _, stream};
 
 use crate::{
-    herder_api::{HerderAction, HerderResponse, HerderService, LayerError, error::rotate_layer_errors},
+    herder_api::{
+        HerderAction, HerderResponse, HerderService, LayerError, error::rotate_layer_errors,
+    },
     ipc_common::bincode_options,
     stdiomux::{self, BytestreamService},
 };
@@ -59,8 +61,9 @@ where
     A: HerderAction,
     S: HerderService<A>,
 {
-    let req = take_req_first::<A, S::Error>(&mut req).await?;
+    let req: A = take_req_first::<A, S::Error>(&mut req).await?;
 
+    #[expect(clippy::type_complexity)]
     let res: Result<HerderResponse<A, S::Error>, LayerError<A::Error, S::Error>> =
         svc.start(req).await;
 

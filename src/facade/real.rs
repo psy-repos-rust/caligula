@@ -1,4 +1,4 @@
-use std::{path::PathBuf,  time::Instant};
+use std::{path::PathBuf, time::Instant};
 
 use futures::StreamExt;
 

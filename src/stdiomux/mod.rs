@@ -4,7 +4,7 @@ use std::error::Error;
 
 use auto_impl::auto_impl;
 use bytes::Bytes;
-use futures::stream::{ LocalBoxStream};
+use futures::stream::LocalBoxStream;
 
 pub mod client;
 pub mod server;

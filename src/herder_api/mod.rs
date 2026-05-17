@@ -22,6 +22,7 @@ pub struct HerderResponse<A: HerderAction, E> {
 
     /// Outer [`Result`] represents transport failures, inner [`Result`]
     /// represents application-level failures.
+    #[expect(clippy::type_complexity)]
     pub events: LocalBoxStream<'static, Result<A::Event, LayerError<A::Error, E>>>,
 }
 
@@ -35,7 +36,7 @@ pub trait HerderService<A: HerderAction> {
     async fn start(
         &self,
         action: A,
-    ) ->  Result<HerderResponse<A, Self::Error>, LayerError<A::Error, Self::Error>>;
+    ) -> Result<HerderResponse<A, Self::Error>, LayerError<A::Error, Self::Error>>;
 }
 
 /// Arbitrary herd initialization action. This can be anything, from writing to
