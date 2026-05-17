@@ -6,8 +6,7 @@ use futures::{
 };
 
 use crate::{
-    herder_api::{HerderAction, HerderResponse, HerderService, LayerError},
-    ipc_common::bincode_options,
+    herder_api::{HerderAction, HerderResponse, HerderService, LayerError, bincode_options},
     stdiomux::BytestreamService,
 };
 

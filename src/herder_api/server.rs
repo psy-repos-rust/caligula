@@ -6,9 +6,9 @@ use futures::{Stream, StreamExt, TryStreamExt as _, stream};
 
 use crate::{
     herder_api::{
-        HerderAction, HerderResponse, HerderService, LayerError, error::rotate_layer_errors,
+        HerderAction, HerderResponse, HerderService, LayerError, bincode_options,
+        error::rotate_layer_errors,
     },
-    ipc_common::bincode_options,
     stdiomux::{self, BytestreamService},
 };
 
