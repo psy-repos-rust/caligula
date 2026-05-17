@@ -260,7 +260,6 @@ dependencies = [
  "base64",
  "bincode",
  "bindgen",
- "byteorder",
  "bytes",
  "bytesize",
  "bzip2",
