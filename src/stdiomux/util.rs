@@ -7,7 +7,7 @@ use tokio::{
     select,
     sync::SetOnce,
 };
-use tracing::{Instrument as _, info_span};
+use tracing::{Instrument as _, info_span, trace_span};
 
 pub async fn drive_tx<W>(
     tx: W,
@@ -27,14 +27,24 @@ where
             continue;
         }
 
+        tracing::trace!(len = ?bytes.len(), "sending message");
+
         // length-framing
-        tx.write_u32(bytes.len().try_into().unwrap()).await?;
-        tx.write_all(&bytes).await?;
-        tx.flush().await?;
+        async {
+            tx.write_u32(bytes.len().try_into().unwrap()).await?;
+            tx.write_all(&bytes).await?;
+            tx.flush().await?;
+            Ok::<(), std::io::Error>(())
+        }
+        .instrument(trace_span!("write_msg"))
+        .await?;
     }
+
+    tracing::trace!("sending EOF");
 
     // out of requests -- write EOF sentinel
     tx.write_u32(0).await?;
+    tx.flush().await?;
     Ok(())
 }
 
@@ -52,22 +62,31 @@ where
 
             let recv = async {
                 let len = usize::try_from(rx.read_u32().await?).unwrap();
+                if len == 0 {
+                    // EOF sentinel
+                    tracing::trace!("got EOF");
+                    return Ok(None);
+                }
+
+                tracing::trace!(?len, "got message");
+
                 let mut msg = BytesMut::with_capacity(len);
                 unsafe {
                     msg.set_len(len);
                 }
-                rx.read_exact(&mut msg).await?;
-                Ok::<Bytes, Arc<std::io::Error>>(msg.freeze())
+                rx.read_exact(&mut msg)
+                    .instrument(trace_span!("read_exact"))
+                    .await?;
+                Ok::<Option<Bytes>, Arc<std::io::Error>>(Some(msg.freeze()))
             };
 
-            let ret = match recv.await {
-                Ok(msg) => (Ok(msg), Some(rx)),
-                Err(err) => (Err(err), None),
-            };
-
-            Some(ret)
+            match recv.await {
+                Ok(Some(msg)) => Some((Ok(msg), Some(rx))),
+                Ok(None) => None,
+                Err(err) => Some((Err(err), None)),
+            }
         }
-        .instrument(info_span!("rx driver"))
+        .instrument(info_span!("rxdriver"))
     })
 }
 
@@ -79,17 +98,15 @@ where
     E: Clone,
     S: Stream<Item = Result<Bytes, E>>,
 {
-    stream
-        .map(move |r| match (r, err_notify.get()) {
-            (_, Some(err)) => Err(err.clone()), // inject error from err_notify
-            (Ok(r), None) => Ok(r),
-            (Err(e), None) => {
-                // inject error into err_notify
-                err_notify.set(e.clone()).ok();
-                Err(e)
-            }
-        })
-        .take_while(move |r| std::future::ready(r.is_ok()))
+    stream.map(move |r| match (r, err_notify.get()) {
+        (_, Some(err)) => Err(err.clone()), // inject error from err_notify
+        (Ok(r), None) => Ok(r),
+        (Err(e), None) => {
+            // inject error into err_notify
+            err_notify.set(e.clone()).ok();
+            Err(e)
+        }
+    })
 }
 
 pub async fn inject_err_fut<T, E, Fut>(fut: Fut, err_notify: Arc<SetOnce<E>>) -> Result<T, E>

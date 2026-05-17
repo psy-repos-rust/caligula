@@ -32,6 +32,7 @@ impl<E: Error> Clone for ServerError<E> {
 /// Run a [`BytestreamService`] over the given transport.
 ///
 /// TODO: make it support multiple requests and responses
+#[tracing::instrument(skip_all, name = "BytestreamServer_run")]
 pub async fn run<R, W, S, E>(rx: R, tx: W, s: S) -> Result<(), ServerError<E>>
 where
     R: AsyncRead + Unpin + Send + 'static,

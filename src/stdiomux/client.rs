@@ -43,8 +43,8 @@ where
     )
 }
 
-/// A client to a remote [`BytestreamClient`] over a transport. Created using the
-/// [`open()`] function.
+/// A client to a remote [`BytestreamClient`] over a transport. Created using
+/// the [`open()`] function.
 ///
 /// Technically speaking, it only supports one request right now, and explodes
 /// afterwards, but that's okay! Refactors will come Soon(tm).
@@ -63,10 +63,12 @@ where
 {
     type Error = ClientError;
 
+    #[tracing::instrument(skip_all, name = "BytestreamClient_call")]
     fn call(
         &self,
         req: BoxStream<'static, Bytes>,
     ) -> BoxStream<'static, Result<Bytes, Self::Error>> {
+        tracing::trace!("making a call");
         let (rx, tx) =
             self.comm.lock().unwrap().take().expect(
                 "called more than once! multiple requests are not currently supported! sowwy!",
@@ -79,7 +81,7 @@ where
                 drive_tx(tx, req).map_err(ClientError::Tx),
                 err_notify_arc.clone(),
             )
-            .instrument(info_span!("tx driver")),
+            .instrument(info_span!("txdriver")),
         );
 
         let err_notify = err_notify_arc;
