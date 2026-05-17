@@ -6,22 +6,28 @@
 
 pub mod client;
 pub mod error;
+pub mod server;
 pub mod write_verify;
 
 use std::{error::Error, fmt::Debug};
 
-use futures::stream::BoxStream;
+use auto_impl::auto_impl;
+use bincode::Options;
+use futures::stream::LocalBoxStream;
 use serde::{Serialize, de::DeserializeOwned};
+
+use crate::herder_api::error::LayerError;
 
 pub struct HerderResponse<A: HerderAction, E> {
     pub start: A::Start,
 
     /// Outer [`Result`] represents transport failures, inner [`Result`]
     /// represents application-level failures.
-    #[expect(clippy::type_complexity, reason = "ugh we'll improve this later")]
-    pub events: BoxStream<'static, Result<Result<A::Event, A::Error>, E>>,
+    #[expect(clippy::type_complexity)]
+    pub events: LocalBoxStream<'static, Result<A::Event, LayerError<A::Error, E>>>,
 }
 
+#[auto_impl(&, Box, Rc, Arc)]
 pub trait HerderService<A: HerderAction> {
     /// Errors that this transport may introduce.
     type Error: Error;
@@ -31,7 +37,7 @@ pub trait HerderService<A: HerderAction> {
     async fn start(
         &self,
         action: A,
-    ) -> Result<Result<HerderResponse<A, Self::Error>, A::Error>, Self::Error>;
+    ) -> Result<HerderResponse<A, Self::Error>, LayerError<A::Error, Self::Error>>;
 }
 
 /// Arbitrary herd initialization action. This can be anything, from writing to
@@ -52,3 +58,12 @@ pub trait Message:
 }
 
 impl<T: Serialize + DeserializeOwned + Debug + Clone + PartialEq + Send + 'static> Message for T {}
+
+/// Common bincode options to use for inter-process communication.
+#[inline]
+fn bincode_options() -> impl bincode::Options {
+    bincode::DefaultOptions::new()
+        .with_fixint_encoding()
+        .with_native_endian()
+        .with_limit(1024)
+}

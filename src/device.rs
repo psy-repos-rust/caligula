@@ -121,7 +121,7 @@ impl WriteTarget {
 
         if let Some(found) = devices.into_iter().find(|t| {
             let bytes = t.devnode.as_os_str().as_bytes();
-            bytes == &expected_if_direct_node || bytes == &expected_if_raw_node
+            bytes == expected_if_direct_node || bytes == expected_if_raw_node
         }) {
             Ok(found)
         } else {
@@ -232,10 +232,10 @@ impl TryFrom<&Path> for WriteTarget {
         }
 
         #[cfg(target_os = "macos")]
-        if value.starts_with("/dev") {
-            if let Some(n) = value.file_name() {
-                return Ok(Self::from_dev_name(n)?);
-            }
+        if value.starts_with("/dev")
+            && let Some(n) = value.file_name()
+        {
+            return Self::from_dev_name(n);
         }
 
         Self::from_normal_file(value)

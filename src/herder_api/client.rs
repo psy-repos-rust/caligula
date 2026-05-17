@@ -1,32 +1,36 @@
-use futures::stream;
-use tokio::io::{AsyncRead, AsyncWrite};
+use bincode::Options as _;
+use bytes::Bytes;
+use futures::{
+    Stream, StreamExt, TryStreamExt,
+    stream::{self, LocalBoxStream},
+};
 
 use crate::{
-    facade::ClientTransportError,
-    herder_api::{HerderAction, HerderResponse, HerderService},
-    ipc_common::{read_msg_async, write_msg_async},
+    herder_api::{HerderAction, HerderResponse, HerderService, LayerError, bincode_options},
+    stdiomux::BytestreamService,
 };
+
+#[derive(Debug, thiserror::Error)]
+pub enum ClientError<Trans> {
+    #[error("Unexpected Server EOF")]
+    UnexpectedServerEof,
+    #[error("Transport error: {0}")]
+    Transport(Trans),
+    #[error("Deserialization error: {0}")]
+    Deserialization(#[from] bincode::Error),
+}
+
+impl<App, Trans> From<ClientError<Trans>> for LayerError<App, ClientError<Trans>> {
+    fn from(value: ClientError<Trans>) -> Self {
+        LayerError::Transport(value)
+    }
+}
 
 /// Create a [`HerderClient`] over the given transport. Returns the client
 /// itself, along with a driver future that must be polled in the background in
 /// order for requests and responses to be handled.
-pub fn create<R, W>(
-    rx: R,
-    tx: W,
-) -> (
-    HerderClient<R, W>,
-    impl Future<Output = Result<(), std::io::Error>>,
-)
-where
-    R: AsyncRead + Unpin + Send + 'static,
-    W: AsyncWrite + Unpin + Send + 'static,
-{
-    (
-        HerderClient {
-            comm: Some((rx, tx)).into(),
-        },
-        std::future::pending(),
-    )
+pub fn create<S: BytestreamService>(transport: S) -> HerderClient<S> {
+    HerderClient { client: transport }
 }
 
 /// A client to a remote [`HerderService`] over a transport. Created using the
@@ -34,56 +38,71 @@ where
 ///
 /// Technically speaking, it only supports one request right now, and explodes
 /// afterwards, but that's okay! Refactors will come Soon(tm).
-pub struct HerderClient<R, W>
-where
-    R: AsyncRead + Unpin + Send + 'static,
-    W: AsyncWrite + Unpin + Send + 'static,
-{
-    comm: std::sync::Mutex<Option<(R, W)>>,
+pub struct HerderClient<S: BytestreamService> {
+    client: S,
 }
 
-impl<A, R, W> HerderService<A> for HerderClient<R, W>
+impl<A, S> HerderService<A> for HerderClient<S>
 where
     A: HerderAction,
-    R: AsyncRead + Unpin + Send + 'static,
-    W: AsyncWrite + Unpin + Send + 'static,
+    S: BytestreamService,
+    S::Error: 'static,
 {
-    type Error = ClientTransportError;
+    type Error = ClientError<S::Error>;
 
     async fn start(
         &self,
         action: A,
-    ) -> Result<Result<HerderResponse<A, Self::Error>, A::Error>, Self::Error> {
+    ) -> Result<HerderResponse<A, Self::Error>, LayerError<A::Error, Self::Error>> {
         // TODO: implement multiplexing
+        let req = request_into_stream(action);
 
-        let (mut rx, mut tx) =
-            self.comm.lock().unwrap().take().expect(
-                "called more than once! multiple requests are not currently supported! sowwy!",
-            );
+        let mut res = self.client.call(req);
 
-        // TODO multiplex this
-        write_msg_async(&mut tx, &action)
-            .await
-            .map_err(ClientTransportError::Tx)?;
+        let start = take_first::<A, _>(&mut res).await?;
+        let events = stream_into_events::<A, _>(res);
 
-        let first_msg = read_msg_async::<Result<A::Start, A::Error>>(&mut rx)
-            .await
-            .map_err(ClientTransportError::Rx)?;
-
-        let start = match first_msg {
-            Ok(start) => start,
-            Err(err) => return Ok(Err(err)),
-        };
-
-        // pass tx through or else there will be unexpected EOFs from it closing.
-        // TODO: ... fix this thing ...
-        let events = Box::pin(stream::unfold((tx, rx), |(tx, mut rx)| async move {
-            let val = read_msg_async::<Result<A::Event, A::Error>>(&mut rx)
-                .await
-                .map_err(ClientTransportError::Rx);
-            Some((val, (tx, rx)))
-        }));
-
-        Ok(Ok(HerderResponse { start, events }))
+        Ok(HerderResponse {
+            start,
+            events: Box::pin(events),
+        })
     }
+}
+
+/// Package a given request into a byte stream.
+fn request_into_stream(action: impl HerderAction) -> LocalBoxStream<'static, Bytes> {
+    let msg = Bytes::from_owner(
+        bincode_options()
+            .serialize(&action)
+            .expect("Serialization error is impossible"),
+    );
+    Box::pin(stream::once(std::future::ready(msg)))
+}
+
+/// Take the first thing off a response stream and try to treat it as
+/// [`HerderAction::Start`] or [`HerderAction::Error`].
+async fn take_first<A: HerderAction, Trans>(
+    res: &mut (impl Stream<Item = Result<Bytes, Trans>> + Unpin),
+) -> Result<A::Start, LayerError<A::Error, ClientError<Trans>>> {
+    let first_result = res.next().await.ok_or(ClientError::UnexpectedServerEof)?;
+    let first_payload = first_result.map_err(ClientError::Transport)?;
+    let first_app_msg: Result<A::Start, A::Error> = bincode_options()
+        .deserialize(&first_payload)
+        .map_err(ClientError::Deserialization)?;
+    let start = first_app_msg.map_err(LayerError::App)?;
+    Ok(start)
+}
+
+/// Deserialize all remaining messages in a response stream.
+fn stream_into_events<A: HerderAction, Trans>(
+    res: LocalBoxStream<'static, Result<Bytes, Trans>>,
+) -> impl Stream<Item = Result<A::Event, LayerError<A::Error, ClientError<Trans>>>> {
+    res.map_err(ClientError::Transport).map(|res| {
+        let bs = res.map_err(LayerError::Transport)?;
+        let msg: Result<A::Event, A::Error> = bincode_options()
+            .deserialize(&bs)
+            .map_err(ClientError::Deserialization)
+            .map_err(LayerError::Transport)?;
+        msg.map_err(LayerError::App)
+    })
 }

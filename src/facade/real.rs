@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::Arc, time::Instant};
+use std::{path::PathBuf, time::Instant};
 
 use futures::StreamExt;
 
@@ -6,7 +6,6 @@ use crate::{
     escalation::EscalationMethod,
     facade::{
         DiskList, DiskWatcher, Escalator, FileAnalyzer, Orchestrator, WVState, WriteVerifyWorkflow,
-        WriteVerifyWorkflowError,
         analyze_input::FileAnalysis,
         child::{ChildHerderClient, SpawnDaemonError},
         watch::Watch,
@@ -66,23 +65,10 @@ impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
             .await;
 
         let res = match res {
-            Ok(Ok(r)) => r,
-            Ok(Err(e)) => {
-                return Watch {
-                    rx: tokio::sync::watch::channel(WVState::error(
-                        Instant::now(),
-                        WriteVerifyWorkflowError::Worker(e),
-                    ))
-                    .1,
-                };
-            }
+            Ok(r) => r,
             Err(e) => {
                 return Watch {
-                    rx: tokio::sync::watch::channel(WVState::error(
-                        Instant::now(),
-                        Arc::new(e).into(),
-                    ))
-                    .1,
+                    rx: tokio::sync::watch::channel(WVState::error(Instant::now(), e.into())).1,
                 };
             }
         };
@@ -97,7 +83,7 @@ impl Orchestrator<WriteVerifyWorkflow> for FacadeImpl {
         ));
 
         let mut events = res.events;
-        let _jh = tokio::spawn(async move {
+        let _jh = tokio::task::spawn_local(async move {
             while !tx_state.borrow().is_finished() && !tx_state.is_closed() {
                 let event = events.next().await;
 

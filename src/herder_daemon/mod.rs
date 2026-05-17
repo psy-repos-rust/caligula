@@ -5,51 +5,78 @@
 // caligula delegate writing to remote hosts over SSH. This may be a very
 // strange but funny feature to implement.
 
-use tracing::info;
-use tracing_unwrap::ResultExt;
+use std::convert::Infallible;
+
+use futures::TryStreamExt;
+use tokio::sync::{mpsc, oneshot};
+use tokio_stream::wrappers::UnboundedReceiverStream;
+use tracing::{debug, info};
 
 use crate::{
-    herder_api::write_verify::{WVAction, WVError, WVEvent},
-    ipc_common::read_msg_async,
-    runtime::RemoteSpawn as _,
+    herder_api::{
+        HerderResponse, HerderService,
+        error::LayerError,
+        server::transportize,
+        write_verify::{WVAction, WVError},
+    },
+    runtime::{AsyncRuntime, RemoteSpawn as _},
+    stdiomux,
 };
 
 mod writer_process;
 
 pub fn main() {
-    let runtime = crate::runtime::AsyncRuntime::start();
-    runtime
-        .spawn(async_main)
+    AsyncRuntime::start()
+        .spawn(|| {
+            stdiomux::server::run(
+                tokio::io::stdin(),
+                tokio::io::stdout(),
+                transportize(HerderServer::new()),
+            )
+        })
         .blocking_recv()
-        .expect("Daemon failed!");
+        .expect("Daemon dropped!")
+        .expect("Daemon errored!");
 }
 
-async fn async_main() {
-    loop {
-        // TODO: multiplex and support multiple action types
-        let action = match read_msg_async::<WVAction>(tokio::io::stdin()).await {
-            Ok(a) => a,
-            Err(e) => {
-                tracing::info!("Error received on stdin, quitting: {e}");
-                return;
-            }
-        };
-        info!(?action, "Received WVAction request");
+struct HerderServer {}
 
-        let child = writer_process::spawn_writer(
-            move |m| {
-                crate::ipc_common::write_msg(std::io::stdout(), &Ok::<_, WVError>(m)).ok_or_log();
-            },
-            move |m| {
-                write_event(&m).ok_or_log();
-            },
-            action,
-        );
-        info!(?child, "Spawned writer thread");
+impl HerderServer {
+    fn new() -> Self {
+        Self {}
     }
 }
 
-/// Typed wrapper around [`crate::ipc_common::write_msg`].
-fn write_event(m: &Result<WVEvent, WVError>) -> Result<(), std::io::Error> {
-    crate::ipc_common::write_msg(std::io::stdout(), m)
+impl HerderService<WVAction> for HerderServer {
+    type Error = Infallible;
+
+    #[tracing::instrument(skip_all)]
+    async fn start(
+        &self,
+        action: WVAction,
+    ) -> Result<HerderResponse<WVAction, Self::Error>, LayerError<WVError, Self::Error>> {
+        info!(?action, "Received WVAction request");
+
+        let (start_tx, start_rx) = oneshot::channel();
+        let (ev_tx, ev_rx) = mpsc::unbounded_channel();
+
+        let child = writer_process::spawn_writer(
+            move |m| {
+                start_tx.send(m).ok();
+            },
+            move |m| {
+                ev_tx.send(m).ok();
+            },
+            action,
+        );
+        debug!(?child, "Spawned writer thread, waiting for start response");
+
+        let start = start_rx.await.map_err(|_| WVError::UnexpectedTermination)?;
+        info!(?child, ?start, "Successfully spawned writer thread");
+
+        Ok(HerderResponse {
+            start,
+            events: Box::pin(UnboundedReceiverStream::new(ev_rx).map_err(LayerError::App)),
+        })
+    }
 }
