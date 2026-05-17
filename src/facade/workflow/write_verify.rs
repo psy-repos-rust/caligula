@@ -1,4 +1,4 @@
-use std::{fs::File, path::PathBuf, sync::Arc, time::Instant};
+use std::{error::Error, fs::File, path::PathBuf, sync::Arc, time::Instant};
 
 use bytesize::ByteSize;
 use tracing::{info, trace};
@@ -7,8 +7,9 @@ use crate::{
     byteseries::{ByteSeries, EstimatedTime},
     compression::CompressionFormat,
     device::WriteTarget,
-    facade::{ClientTransportError, workflow::WorkflowState},
-    herder_api::write_verify::*,
+    facade::workflow::WorkflowState,
+    herder_api::{client::ClientError, error::LayerError, write_verify::*},
+    stdiomux,
 };
 
 /// Params for starting a write + verify workflow.
@@ -69,14 +70,36 @@ pub enum WVState {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum WriteVerifyWorkflowError {
     #[error("Worker error: {0}")]
     Worker(#[from] WVError),
     #[error("Transport error: {0}")]
-    Transport(#[from] Arc<ClientTransportError>),
+    Transport(Arc<dyn Error + Send + Sync + 'static>),
     #[error("Orchestrator panicked!")]
     Panicked,
+}
+
+impl<Trans> From<LayerError<WVError, Trans>> for WriteVerifyWorkflowError
+where
+    Trans: Error + Send + Sync + 'static,
+{
+    fn from(value: LayerError<WVError, Trans>) -> Self {
+        match value {
+            LayerError::App(app) => WriteVerifyWorkflowError::Worker(app),
+            LayerError::Transport(trans) => WriteVerifyWorkflowError::Transport(Arc::new(trans)),
+        }
+    }
+}
+
+impl PartialEq for WriteVerifyWorkflowError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Worker(l0), Self::Worker(r0)) => l0 == r0,
+            (Self::Transport(_l0), Self::Transport(_r0)) => true,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
 }
 
 impl WorkflowState for WVState {
@@ -110,7 +133,9 @@ impl WVState {
     pub fn on_response(
         self,
         now: Instant,
-        msg: Option<Result<Result<WVEvent, WVError>, ClientTransportError>>,
+        msg: Option<
+            Result<WVEvent, LayerError<WVError, ClientError<stdiomux::client::ClientError>>>,
+        >,
     ) -> Self {
         // peel off EOF
         let Some(msg) = msg else {
@@ -118,21 +143,11 @@ impl WVState {
             return self.into_finished(now, Err(WVError::UnexpectedTermination.into()));
         };
 
-        // peel off transport errors
+        // peel off errors
         let msg = match msg {
             Ok(msg) => msg,
             Err(err) => {
                 info!("Error in transport");
-                return self
-                    .into_finished(now, Err(WriteVerifyWorkflowError::Transport(err.into())));
-            }
-        };
-
-        // peel off application errors
-        let msg = match msg {
-            Ok(msg) => msg,
-            Err(err) => {
-                tracing::error!(?err, "Received error notification");
                 return self.into_finished(now, Err(err.into()));
             }
         };

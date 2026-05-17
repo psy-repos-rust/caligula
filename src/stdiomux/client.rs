@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use futures::{TryFutureExt, TryStreamExt, stream::BoxStream};
+use futures::{
+    TryFutureExt, TryStreamExt,
+    stream::{ LocalBoxStream},
+};
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::SetOnce,
@@ -66,8 +69,8 @@ where
     #[tracing::instrument(skip_all, name = "BytestreamClient_call")]
     fn call(
         &self,
-        req: BoxStream<'static, Bytes>,
-    ) -> BoxStream<'static, Result<Bytes, Self::Error>> {
+        req: LocalBoxStream<'static, Bytes>,
+    ) -> LocalBoxStream<'static, Result<Bytes, Self::Error>> {
         tracing::trace!("making a call");
         let (rx, tx) =
             self.comm.lock().unwrap().take().expect(

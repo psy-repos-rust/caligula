@@ -5,34 +5,12 @@ use tokio::process::{Child, ChildStdin, ChildStdout};
 use crate::{
     escalation::{EscalationError, run_escalate},
     herder_api::{
-        self, HerderResponse, HerderService,
-        client::HerderClient,
-        write_verify::{WVAction, WVError},
+        self, HerderAction, HerderResponse, HerderService, client::HerderClient, error::LayerError,
     },
+    stdiomux::{self, client::BytestreamClient},
 };
 
-type Client = HerderClient<ChildStdout, ChildStdin>;
-
-#[derive(Debug, thiserror::Error)]
-pub enum ClientTransportError {
-    #[error("Daemon management error: {0}")]
-    DaemonError(#[from] SpawnDaemonError),
-    #[error("Error receiving a message: {0}")]
-    Rx(std::io::Error),
-    #[error("Error sending a message: {0}")]
-    Tx(std::io::Error),
-}
-
-impl PartialEq for ClientTransportError {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::DaemonError(l0), Self::DaemonError(r0)) => l0 == r0,
-            (Self::Rx(_), Self::Rx(_)) => true,
-            (Self::Tx(_), Self::Tx(_)) => true,
-            _ => false,
-        }
-    }
-}
+type Client = HerderClient<BytestreamClient<ChildStdout, ChildStdin>>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SpawnDaemonError {
@@ -62,7 +40,7 @@ pub async fn spawn(
 ) -> Result<
     (
         ChildHerderClient,
-        impl Future<Output = Result<(), std::io::Error>>,
+        impl Future<Output = Result<(), stdiomux::client::ClientError>>,
     ),
     SpawnDaemonError,
 > {
@@ -97,7 +75,8 @@ pub async fn spawn(
     let child_rx = child.stdout.take().unwrap();
     let child_tx = child.stdin.take().unwrap();
 
-    let (client, fut) = herder_api::client::create(child_rx, child_tx);
+    let (client, fut) = stdiomux::client::open(child_rx, child_tx);
+    let client = herder_api::client::create(client);
 
     Ok((
         ChildHerderClient {
@@ -113,13 +92,13 @@ pub struct ChildHerderClient {
     client: Client,
 }
 
-impl HerderService<WVAction> for ChildHerderClient {
-    type Error = <Client as HerderService<WVAction>>::Error;
+impl<A: HerderAction> HerderService<A> for ChildHerderClient {
+    type Error = <Client as HerderService<A>>::Error;
 
     async fn start(
         &self,
-        action: WVAction,
-    ) -> Result<Result<HerderResponse<WVAction, Self::Error>, WVError>, Self::Error> {
+        action: A,
+    ) -> Result<HerderResponse<A, Self::Error>, LayerError<A::Error, Self::Error>> {
         self.client.start(action).await
     }
 }
